@@ -320,7 +320,7 @@ func formatSize(size int64) string {
 	return fmt.Sprintf("%.2f %cB", float64(size)/float64(div), "KMGTPE"[exp])
 }
 
-// handleList lists all messages in chronological order (newest first)
+// handleList lists all messages in chronological order (newest first) and returns storage capacity headers
 func handleList(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
@@ -333,10 +333,15 @@ func handleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var totalSize int64
 	messages := make([]Message, 0)
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
+		}
+		info, err := entry.Info()
+		if err == nil {
+			totalSize += info.Size()
 		}
 		msg, err := parseFilename(entry.Name())
 		if err != nil {
@@ -352,6 +357,8 @@ func handleList(w http.ResponseWriter, r *http.Request) {
 		return getTimestampFromID(messages[i].ID) > getTimestampFromID(messages[j].ID)
 	})
 
+	w.Header().Set("X-Quota-Used", strconv.FormatInt(totalSize, 10))
+	w.Header().Set("X-Quota-Limit", strconv.FormatInt(maxDirSize, 10))
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(messages)
 }

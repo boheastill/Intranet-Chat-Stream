@@ -34,6 +34,7 @@ type Message struct {
 	Size     string `json:"size,omitempty"`
 	Time     string `json:"time"`
 	Pinned   bool   `json:"pinned"`
+	Device   string `json:"device"`
 }
 
 // ActionPayload is the JSON structure for pin/unpin/delete operations
@@ -241,9 +242,10 @@ func getSafeFilePath(id string) (string, error) {
 
 // parseFilename parses metadata out of the actual filesystem filename
 func parseFilename(filename string) (*Message, error) {
-	// Standard: [pinned_]?[timestamp]_[original_name]
+	// Standard: [pinned_]?[timestamp]_[device]_[original_name] or legacy: [pinned_]?[timestamp]_[original_name]
 	msg := &Message{
-		ID: filename,
+		ID:     filename,
+		Device: "pc", // default
 	}
 
 	workingName := filename
@@ -259,7 +261,7 @@ func parseFilename(filename string) (*Message, error) {
 	}
 
 	tsStr := workingName[:idx]
-	origName := workingName[idx+1:]
+	rest := workingName[idx+1:]
 
 	ts, err := strconv.ParseInt(tsStr, 10, 64)
 	if err != nil {
@@ -267,6 +269,17 @@ func parseFilename(filename string) (*Message, error) {
 	}
 
 	msg.Time = time.Unix(ts, 0).Format("2006-01-02 15:04:05")
+
+	// Check if there is a device tag
+	origName := rest
+	idx2 := strings.Index(rest, "_")
+	if idx2 != -1 {
+		possibleDevice := rest[:idx2]
+		if possibleDevice == "pc" || possibleDevice == "mobile" || possibleDevice == "ai" || possibleDevice == "web" {
+			msg.Device = possibleDevice
+			origName = rest[idx2+1:]
+		}
+	}
 
 	if origName == "text.txt" {
 		msg.Type = "text"
@@ -370,13 +383,18 @@ func handlePush(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	device := r.FormValue("device")
+	if device != "pc" && device != "mobile" && device != "ai" && device != "web" {
+		device = "pc" // Default
+	}
+
 	now := time.Now().Unix()
 	var createdID string
 
 	// 1. Check for text push
 	textVal := r.FormValue("text")
 	if strings.TrimSpace(textVal) != "" {
-		filename := fmt.Sprintf("%d_text.txt", now)
+		filename := fmt.Sprintf("%d_%s_text.txt", now, device)
 		filePath := filepath.Join(filesDir, filename)
 
 		if err := os.WriteFile(filePath, []byte(textVal), 0644); err != nil {
@@ -400,7 +418,7 @@ func handlePush(w http.ResponseWriter, r *http.Request) {
 			origFilename = "unnamed_file"
 		}
 
-		filename := fmt.Sprintf("%d_%s", now, origFilename)
+		filename := fmt.Sprintf("%d_%s_%s", now, device, origFilename)
 		filePath := filepath.Join(filesDir, filename)
 
 		out, err := os.Create(filePath)

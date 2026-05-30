@@ -41,8 +41,17 @@ type ActionPayload struct {
 	Action string `json:"action"` // "pin", "unpin", "delete"
 }
 
-// Max directory size threshold for rolling deletion (default 2GB)
-var maxDirSize int64 = 2 * 1024 * 1024 * 1024 // 2 GB
+// Config represents the application configuration format
+type Config struct {
+	Token    string `json:"token"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+var (
+	globalConfig Config
+	maxDirSize   int64 = 2 * 1024 * 1024 * 1024 // 2 GB
+)
 
 func main() {
 	// Ensure directories exist
@@ -53,8 +62,8 @@ func main() {
 		log.Fatalf("Failed to create static directory: %v", err)
 	}
 
-	// Load or generate static security token
-	secretToken := loadOrGenerateToken()
+	// Load or generate static security config
+	globalConfig = loadOrGenerateConfig()
 
 	// Setup clean environment variable limit override if needed (e.g. for testing)
 	if envLimit := os.Getenv("ICS_MAX_DIR_SIZE_BYTES"); envLimit != "" {
@@ -70,11 +79,12 @@ func main() {
 	mux.HandleFunc("/api/list", handleList)
 	mux.HandleFunc("/api/push", handlePush)
 	mux.HandleFunc("/api/action", handleAction)
+	mux.HandleFunc("/api/login", handleLogin)
 	mux.HandleFunc("/download/", handleDownload)
 	mux.HandleFunc("/", serveStatic)
 
 	// Apply Token authentication middleware
-	handlerWithMiddleware := tokenAuthMiddleware(mux, secretToken)
+	handlerWithMiddleware := tokenAuthMiddleware(mux, globalConfig.Token)
 
 	// Listen only on 127.0.0.1 for maximum loopback security (Cloudflare Tunnel forwards locally)
 	bindAddr := "127.0.0.1" + port
@@ -93,43 +103,67 @@ func generateRandomToken() string {
 	return hex.EncodeToString(bytes)
 }
 
-// loadOrGenerateToken loads token from config.json or generates a new one
-func loadOrGenerateToken() string {
+// loadOrGenerateConfig loads config from config.json or generates a new one
+func loadOrGenerateConfig() Config {
 	configPath := "./config.json"
-	type Config struct {
-		Token string `json:"token"`
-	}
+	defaultEmail := "284420441@qq.com"
+	defaultPassword := "66666666"
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		token := generateRandomToken()
-		cfg := Config{Token: token}
+		cfg := Config{
+			Token:    token,
+			Email:    defaultEmail,
+			Password: defaultPassword,
+		}
 		data, _ := json.MarshalIndent(cfg, "", "  ")
 		_ = os.WriteFile(configPath, data, 0600)
-		log.Printf("Generated new secure token in config.json: %s", token)
-		return token
+		log.Printf("Generated new secure config in config.json with token: %s", token)
+		return cfg
 	}
 
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		log.Printf("Warning: failed to read config.json: %v. Using temporary token.", err)
-		return "temporary_token"
+		log.Printf("Warning: failed to read config.json: %v. Using defaults.", err)
+		return Config{
+			Token:    "temporary_token",
+			Email:    defaultEmail,
+			Password: defaultPassword,
+		}
 	}
 
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil || cfg.Token == "" {
-		log.Printf("Warning: invalid config.json. Using temporary token.")
-		return "temporary_token"
+		log.Printf("Warning: invalid config.json. Using defaults.")
+		return Config{
+			Token:    "temporary_token",
+			Email:    defaultEmail,
+			Password: defaultPassword,
+		}
 	}
 
-	return cfg.Token
+	if cfg.Email == "" {
+		cfg.Email = defaultEmail
+	}
+	if cfg.Password == "" {
+		cfg.Password = defaultPassword
+	}
+
+	// Save back to config.json if there were missing fields
+	if cfg.Email == defaultEmail || cfg.Password == defaultPassword {
+		data, _ = json.MarshalIndent(cfg, "", "  ")
+		_ = os.WriteFile(configPath, data, 0600)
+	}
+
+	return cfg
 }
 
 // tokenAuthMiddleware enforces secret Token checks for all private API routes
 func tokenAuthMiddleware(next http.Handler, secretToken string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Exempt static frontend files from token validation
+		// Exempt static frontend files and login endpoint from token validation
 		path := r.URL.Path
-		if path == "/" || path == "/index.html" || strings.HasPrefix(path, "/static/") {
+		if path == "/" || path == "/index.html" || strings.HasPrefix(path, "/static/") || path == "/api/login" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -568,4 +602,49 @@ func cleanupOldFiles() {
 			log.Printf("Cleanup warning: failed to delete file %s: %v", f.name, err)
 		}
 	}
+}
+
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type LoginResponse struct {
+	Status string `json:"status"`
+	Token  string `json:"token,omitempty"`
+	Error  string `json:"error,omitempty"`
+}
+
+// handleLogin validates email and password, and returns the secure token if valid
+func handleLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(LoginResponse{Status: "error", Error: "Invalid request payload"})
+		return
+	}
+
+	if strings.TrimSpace(req.Email) == "" || strings.TrimSpace(req.Password) == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(LoginResponse{Status: "error", Error: "Email and password cannot be empty"})
+		return
+	}
+
+	if req.Email == globalConfig.Email && req.Password == globalConfig.Password {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(LoginResponse{Status: "success", Token: globalConfig.Token})
+		return
+	}
+
+	log.Printf("[%s] Failed login attempt for email: %s", r.RemoteAddr, req.Email)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+	json.NewEncoder(w).Encode(LoginResponse{Status: "error", Error: "Invalid email or password"})
 }

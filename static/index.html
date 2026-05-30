@@ -674,10 +674,25 @@
     <div id="loginModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(11, 13, 17, 0.96); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); display: none; align-items: center; justify-content: center; z-index: 1000;">
         <div style="background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 1.5rem; padding: 2.5rem; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 15px 35px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 1.5rem;">
             <div class="logo-icon" style="margin: 0 auto; width: 3.5rem; height: 3.5rem; font-size: 1.6rem; border-radius: 0.8rem;">C</div>
-            <h2 style="font-size: 1.4rem; font-weight: 600; background: linear-gradient(to right, #ffffff, var(--text-secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">需要访问密钥</h2>
-            <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.4;">请输入此云流的安全 Token 进行同步认证</p>
-            <input type="password" id="tokenField" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 1rem; border-radius: 0.75rem; font-size: 1.1rem; text-align: center; outline: none; font-family: monospace; transition: border-color 0.2s;" placeholder="••••••••••••••••">
+            <h2 id="loginTitle" style="font-size: 1.4rem; font-weight: 600; background: linear-gradient(to right, #ffffff, var(--text-secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">需要访问密钥</h2>
+            <p id="loginSubtitle" style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.4;">请输入此云流的安全 Token 进行同步认证</p>
+            
+            <!-- Token input view -->
+            <div id="tokenInputContainer" style="width: 100%; display: flex; flex-direction: column; gap: 1rem;">
+                <input type="password" id="tokenField" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 1rem; border-radius: 0.75rem; font-size: 1.1rem; text-align: center; outline: none; font-family: monospace; transition: border-color 0.2s;" placeholder="••••••••••••••••">
+            </div>
+
+            <!-- Email & Password input view -->
+            <div id="emailInputContainer" style="width: 100%; display: none; flex-direction: column; gap: 1rem;">
+                <input type="email" id="emailField" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 1rem; border-radius: 0.75rem; font-size: 1rem; text-align: center; outline: none; transition: border-color 0.2s;" placeholder="密保邮箱">
+                <input type="password" id="passwordField" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 1rem; border-radius: 0.75rem; font-size: 1rem; text-align: center; outline: none; transition: border-color 0.2s;" placeholder="访问密码">
+            </div>
+
             <button id="btnLogin" class="submit-btn" style="width: 100%; justify-content: center; padding: 0.8rem 1rem; font-size: 0.95rem; border-radius: 0.75rem;">验证并进入</button>
+            
+            <div style="margin-top: 0.5rem;">
+                <a href="#" id="toggleLoginMode" style="color: var(--text-secondary); font-size: 0.8rem; text-decoration: underline; cursor: pointer; transition: color 0.2s;">使用邮箱密码登录</a>
+            </div>
         </div>
     </div>
 
@@ -699,12 +714,15 @@
 
         const loginModal = document.getElementById('loginModal');
         const tokenField = document.getElementById('tokenField');
+        const emailField = document.getElementById('emailField');
+        const passwordField = document.getElementById('passwordField');
         const btnLogin = document.getElementById('btnLogin');
 
         let token = '';
         let lastListHash = '';
         let isPolling = false;
         let pollingInterval = null;
+        let loginMode = 'token'; // 'token' or 'email'
 
         // Initialize Authentication flow
         initAuth();
@@ -719,34 +737,133 @@
                 window.history.replaceState({}, document.title, window.location.pathname);
             }
 
+            // Detect if emergency login or special login page is requested via URL parameter
+            const loginParam = urlParams.get('login');
+            const emergencyParam = urlParams.get('emergency');
+            const showEmailLogin = loginParam === '1' || emergencyParam === '1' || emergencyParam === 'true';
+
             // 2. Load token from localStorage
             token = localStorage.getItem('ics_token');
 
             if (!token) {
                 // If not authenticated, show password overlay modal
                 loginModal.style.display = 'flex';
-                tokenField.focus();
                 
+                if (showEmailLogin) {
+                    setLoginMode('email');
+                } else {
+                    setLoginMode('token');
+                }
+
                 // Set up submission hooks
-                btnLogin.onclick = submitToken;
+                btnLogin.onclick = handleLoginSubmit;
                 tokenField.onkeydown = e => {
-                    if (e.key === 'Enter') submitToken();
+                    if (e.key === 'Enter') handleLoginSubmit();
+                };
+                emailField.onkeydown = e => {
+                    if (e.key === 'Enter') passwordField.focus();
+                };
+                passwordField.onkeydown = e => {
+                    if (e.key === 'Enter') handleLoginSubmit();
+                };
+
+                document.getElementById('toggleLoginMode').onclick = (e) => {
+                    e.preventDefault();
+                    setLoginMode(loginMode === 'token' ? 'email' : 'token');
                 };
             } else {
                 startService();
             }
         }
 
-        function submitToken() {
-            const entered = tokenField.value.trim();
-            if (!entered) {
-                tokenField.style.borderColor = 'var(--danger-color)';
-                return;
+        function setLoginMode(mode) {
+            loginMode = mode;
+            const tokenContainer = document.getElementById('tokenInputContainer');
+            const emailContainer = document.getElementById('emailInputContainer');
+            const toggleLink = document.getElementById('toggleLoginMode');
+            const loginTitle = document.getElementById('loginTitle');
+            const loginSubtitle = document.getElementById('loginSubtitle');
+
+            // Reset error borders
+            tokenField.style.borderColor = 'var(--border-color)';
+            emailField.style.borderColor = 'var(--border-color)';
+            passwordField.style.borderColor = 'var(--border-color)';
+
+            if (mode === 'email') {
+                tokenContainer.style.display = 'none';
+                emailContainer.style.display = 'flex';
+                toggleLink.innerText = '使用安全 Token 登录';
+                loginTitle.innerText = '紧急邮箱验证';
+                loginSubtitle.innerText = '使用您的白名单邮箱和紧急密码安全进入';
+                emailField.focus();
+            } else {
+                tokenContainer.style.display = 'flex';
+                emailContainer.style.display = 'none';
+                toggleLink.innerText = '使用邮箱密码登录';
+                loginTitle.innerText = '需要访问密钥';
+                loginSubtitle.innerText = '请输入此云流的安全 Token 进行同步认证';
+                tokenField.focus();
             }
-            localStorage.setItem('ics_token', entered);
-            token = entered;
-            loginModal.style.display = 'none';
-            startService();
+        }
+
+        async function handleLoginSubmit() {
+            if (loginMode === 'token') {
+                const entered = tokenField.value.trim();
+                if (!entered) {
+                    tokenField.style.borderColor = 'var(--danger-color)';
+                    return;
+                }
+                localStorage.setItem('ics_token', entered);
+                token = entered;
+                loginModal.style.display = 'none';
+                startService();
+            } else {
+                const email = emailField.value.trim();
+                const password = passwordField.value.trim();
+                if (!email) {
+                    emailField.style.borderColor = 'var(--danger-color)';
+                    return;
+                }
+                if (!password) {
+                    passwordField.style.borderColor = 'var(--danger-color)';
+                    return;
+                }
+
+                emailField.style.borderColor = 'var(--border-color)';
+                passwordField.style.borderColor = 'var(--border-color)';
+                btnLogin.disabled = true;
+                btnLogin.innerText = '正在验证...';
+
+                try {
+                    const response = await fetch('/api/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email, password })
+                    });
+
+                    if (!response.ok) {
+                        const data = await response.json();
+                        throw new Error(data.error || '验证失败');
+                    }
+
+                    const data = await response.json();
+                    if (data.status === 'success' && data.token) {
+                        localStorage.setItem('ics_token', data.token);
+                        token = data.token;
+                        loginModal.style.display = 'none';
+                        startService();
+                    } else {
+                        throw new Error('未返回有效 Token');
+                    }
+                } catch (err) {
+                    alert(err.message || '登录验证失败，请检查账户及密码');
+                    emailField.style.borderColor = 'var(--danger-color)';
+                    passwordField.style.borderColor = 'var(--danger-color)';
+                } finally {
+                    btnLogin.disabled = false;
+                    btnLogin.innerText = '验证并进入';
+                }
+            }
         }
 
         function startService() {
@@ -767,9 +884,16 @@
                 pollingInterval = null;
             }
             tokenField.value = '';
+            emailField.value = '';
+            passwordField.value = '';
             tokenField.style.borderColor = 'var(--danger-color)';
             loginModal.style.display = 'flex';
-            tokenField.focus();
+            
+            if (loginMode === 'email') {
+                emailField.focus();
+            } else {
+                tokenField.focus();
+            }
         }
 
         // Fetch stream list

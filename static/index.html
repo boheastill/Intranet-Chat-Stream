@@ -682,16 +682,15 @@
                 <input type="password" id="tokenField" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 1rem; border-radius: 0.75rem; font-size: 1.1rem; text-align: center; outline: none; font-family: monospace; transition: border-color 0.2s;" placeholder="••••••••••••••••">
             </div>
 
-            <!-- Email & Password input view -->
+            <!-- Emergency Password input view -->
             <div id="emailInputContainer" style="width: 100%; display: none; flex-direction: column; gap: 1rem;">
-                <input type="email" id="emailField" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 1rem; border-radius: 0.75rem; font-size: 1rem; text-align: center; outline: none; transition: border-color 0.2s;" placeholder="密保邮箱">
-                <input type="password" id="passwordField" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 1rem; border-radius: 0.75rem; font-size: 1rem; text-align: center; outline: none; transition: border-color 0.2s;" placeholder="访问密码">
+                <input type="password" id="passwordField" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 1rem; border-radius: 0.75rem; font-size: 1.1rem; text-align: center; outline: none; transition: border-color 0.2s;" placeholder="请输入密保密码">
             </div>
 
             <button id="btnLogin" class="submit-btn" style="width: 100%; justify-content: center; padding: 0.8rem 1rem; font-size: 0.95rem; border-radius: 0.75rem;">验证并进入</button>
             
             <div style="margin-top: 0.5rem; display: none;" id="toggleLoginContainer">
-                <a href="#" id="toggleLoginMode" style="color: var(--text-secondary); font-size: 0.8rem; text-decoration: underline; cursor: pointer; transition: color 0.2s;">使用邮箱密码登录</a>
+                <a href="#" id="toggleLoginMode" style="color: var(--text-secondary); font-size: 0.8rem; text-decoration: underline; cursor: pointer; transition: color 0.2s;">使用密保密码登录</a>
             </div>
         </div>
     </div>
@@ -714,7 +713,6 @@
 
         const loginModal = document.getElementById('loginModal');
         const tokenField = document.getElementById('tokenField');
-        const emailField = document.getElementById('emailField');
         const passwordField = document.getElementById('passwordField');
         const btnLogin = document.getElementById('btnLogin');
 
@@ -769,9 +767,6 @@
                 tokenField.onkeydown = e => {
                     if (e.key === 'Enter') handleLoginSubmit();
                 };
-                emailField.onkeydown = e => {
-                    if (e.key === 'Enter') passwordField.focus();
-                };
                 passwordField.onkeydown = e => {
                     if (e.key === 'Enter') handleLoginSubmit();
                 };
@@ -795,20 +790,19 @@
 
             // Reset error borders
             tokenField.style.borderColor = 'var(--border-color)';
-            emailField.style.borderColor = 'var(--border-color)';
             passwordField.style.borderColor = 'var(--border-color)';
 
             if (mode === 'email') {
                 tokenContainer.style.display = 'none';
                 emailContainer.style.display = 'flex';
                 toggleLink.innerText = '使用安全 Token 登录';
-                loginTitle.innerText = '紧急邮箱验证';
-                loginSubtitle.innerText = '使用您的白名单邮箱和紧急密码安全进入';
-                emailField.focus();
+                loginTitle.innerText = '密保密码验证';
+                loginSubtitle.innerText = '请输入此云流的密保密码安全进入';
+                passwordField.focus();
             } else {
                 tokenContainer.style.display = 'flex';
                 emailContainer.style.display = 'none';
-                toggleLink.innerText = '使用邮箱密码登录';
+                toggleLink.innerText = '使用密保密码登录';
                 loginTitle.innerText = '需要访问密钥';
                 loginSubtitle.innerText = '请输入此云流的安全 Token 进行同步认证';
                 tokenField.focus();
@@ -827,18 +821,12 @@
                 loginModal.style.display = 'none';
                 startService();
             } else {
-                const email = emailField.value.trim();
                 const password = passwordField.value.trim();
-                if (!email) {
-                    emailField.style.borderColor = 'var(--danger-color)';
-                    return;
-                }
                 if (!password) {
                     passwordField.style.borderColor = 'var(--danger-color)';
                     return;
                 }
 
-                emailField.style.borderColor = 'var(--border-color)';
                 passwordField.style.borderColor = 'var(--border-color)';
                 btnLogin.disabled = true;
                 btnLogin.innerText = '正在验证...';
@@ -847,7 +835,7 @@
                     const response = await fetch('/api/login', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ email, password, key: loginKey })
+                        body: JSON.stringify({ password, key: loginKey })
                     });
 
                     if (!response.ok) {
@@ -865,8 +853,7 @@
                         throw new Error('未返回有效 Token');
                     }
                 } catch (err) {
-                    alert(err.message || '登录验证失败，请检查账户、密码及 URL 参数');
-                    emailField.style.borderColor = 'var(--danger-color)';
+                    alert(err.message || '登录验证失败，请检查密码及 URL 参数');
                     passwordField.style.borderColor = 'var(--danger-color)';
                 } finally {
                     btnLogin.disabled = false;
@@ -893,13 +880,12 @@
                 pollingInterval = null;
             }
             tokenField.value = '';
-            emailField.value = '';
             passwordField.value = '';
             tokenField.style.borderColor = 'var(--danger-color)';
             loginModal.style.display = 'flex';
             
             if (loginMode === 'email') {
-                emailField.focus();
+                passwordField.focus();
             } else {
                 tokenField.focus();
             }

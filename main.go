@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -44,14 +45,20 @@ type ActionPayload struct {
 // Config represents the application configuration format
 type Config struct {
 	Token    string `json:"token"`
-	Email    string `json:"email"`
 	Password string `json:"password"`
 	LoginKey string `json:"login_key"`
+}
+
+type IPAttempt struct {
+	FailCount int
+	LastTime  time.Time
 }
 
 var (
 	globalConfig Config
 	maxDirSize   int64 = 2 * 1024 * 1024 * 1024 // 2 GB
+	attemptsMu   sync.Mutex
+	ipAttempts   = make(map[string]IPAttempt)
 )
 
 func main() {
@@ -107,7 +114,6 @@ func generateRandomToken() string {
 // loadOrGenerateConfig loads config from config.json or generates a new one
 func loadOrGenerateConfig() Config {
 	configPath := "./config.json"
-	defaultEmail := "284420441@qq.com"
 	defaultPassword := "66666666"
 	defaultLoginKey := "vip"
 
@@ -115,7 +121,6 @@ func loadOrGenerateConfig() Config {
 		token := generateRandomToken()
 		cfg := Config{
 			Token:    token,
-			Email:    defaultEmail,
 			Password: defaultPassword,
 			LoginKey: defaultLoginKey,
 		}
@@ -130,7 +135,6 @@ func loadOrGenerateConfig() Config {
 		log.Printf("Warning: failed to read config.json: %v. Using defaults.", err)
 		return Config{
 			Token:    "temporary_token",
-			Email:    defaultEmail,
 			Password: defaultPassword,
 			LoginKey: defaultLoginKey,
 		}
@@ -141,15 +145,11 @@ func loadOrGenerateConfig() Config {
 		log.Printf("Warning: invalid config.json. Using defaults.")
 		return Config{
 			Token:    "temporary_token",
-			Email:    defaultEmail,
 			Password: defaultPassword,
 			LoginKey: defaultLoginKey,
 		}
 	}
 
-	if cfg.Email == "" {
-		cfg.Email = defaultEmail
-	}
 	if cfg.Password == "" {
 		cfg.Password = defaultPassword
 	}
@@ -158,7 +158,7 @@ func loadOrGenerateConfig() Config {
 	}
 
 	// Save back to config.json if there were missing fields
-	if cfg.Email == defaultEmail || cfg.Password == defaultPassword || cfg.LoginKey == defaultLoginKey {
+	if cfg.Password == defaultPassword || cfg.LoginKey == defaultLoginKey {
 		data, _ = json.MarshalIndent(cfg, "", "  ")
 		_ = os.WriteFile(configPath, data, 0600)
 	}
@@ -613,7 +613,6 @@ func cleanupOldFiles() {
 }
 
 type LoginRequest struct {
-	Email    string `json:"email"`
 	Password string `json:"password"`
 	Key      string `json:"key"`
 }
@@ -624,11 +623,54 @@ type LoginResponse struct {
 	Error  string `json:"error,omitempty"`
 }
 
-// handleLogin validates email and password, and returns the secure token if valid
+// getClientIP extracts client IP address taking into account Cloudflare headers
+func getClientIP(r *http.Request) string {
+	if cfIP := r.Header.Get("CF-Connecting-IP"); cfIP != "" {
+		return cfIP
+	}
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		parts := strings.Split(xff, ",")
+		return strings.TrimSpace(parts[0])
+	}
+	parts := strings.Split(r.RemoteAddr, ":")
+	if len(parts) > 0 {
+		return parts[0]
+	}
+	return r.RemoteAddr
+}
+
+// handleLogin validates password and key with exponential backoff per IP
 func handleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
+	}
+
+	ip := getClientIP(r)
+
+	attemptsMu.Lock()
+	attempt, exists := ipAttempts[ip]
+	attemptsMu.Unlock()
+
+	now := time.Now()
+	if exists && attempt.FailCount > 0 {
+		// delay = 2^(FailCount-1) seconds
+		delaySec := 1 << (attempt.FailCount - 1)
+		if delaySec > 60 {
+			delaySec = 60
+		}
+
+		elapsed := now.Sub(attempt.LastTime)
+		remaining := time.Duration(delaySec)*time.Second - elapsed
+		if remaining > 0 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			json.NewEncoder(w).Encode(LoginResponse{
+				Status: "error",
+				Error:  fmt.Sprintf("尝试次数过多，请等待 %d 秒后重试", int(remaining.Seconds())+1),
+			})
+			return
+		}
 	}
 
 	var req LoginRequest
@@ -639,21 +681,33 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.TrimSpace(req.Email) == "" || strings.TrimSpace(req.Password) == "" || strings.TrimSpace(req.Key) == "" {
+	if strings.TrimSpace(req.Password) == "" || strings.TrimSpace(req.Key) == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(LoginResponse{Status: "error", Error: "Email, password, and URL key cannot be empty"})
+		json.NewEncoder(w).Encode(LoginResponse{Status: "error", Error: "Password and URL key cannot be empty"})
 		return
 	}
 
-	if req.Email == globalConfig.Email && req.Password == globalConfig.Password && req.Key == globalConfig.LoginKey {
+	if req.Password == globalConfig.Password && req.Key == globalConfig.LoginKey {
+		// Success: reset attempts
+		attemptsMu.Lock()
+		delete(ipAttempts, ip)
+		attemptsMu.Unlock()
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(LoginResponse{Status: "success", Token: globalConfig.Token})
 		return
 	}
 
-	log.Printf("[%s] Failed login attempt for email: %s with key: %s", r.RemoteAddr, req.Email, req.Key)
+	// Failure: record attempt
+	attemptsMu.Lock()
+	attempt.FailCount++
+	attempt.LastTime = now
+	ipAttempts[ip] = attempt
+	attemptsMu.Unlock()
+
+	log.Printf("[%s] Failed login attempt with key: %s (Fail count: %d)", ip, req.Key, attempt.FailCount)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
-	json.NewEncoder(w).Encode(LoginResponse{Status: "error", Error: "Invalid credentials or URL parameter key"})
+	json.NewEncoder(w).Encode(LoginResponse{Status: "error", Error: "密码或 URL 参数错误"})
 }

@@ -46,6 +46,7 @@ type Config struct {
 	Token    string `json:"token"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
+	LoginKey string `json:"login_key"`
 }
 
 var (
@@ -108,6 +109,7 @@ func loadOrGenerateConfig() Config {
 	configPath := "./config.json"
 	defaultEmail := "284420441@qq.com"
 	defaultPassword := "66666666"
+	defaultLoginKey := "vip"
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		token := generateRandomToken()
@@ -115,6 +117,7 @@ func loadOrGenerateConfig() Config {
 			Token:    token,
 			Email:    defaultEmail,
 			Password: defaultPassword,
+			LoginKey: defaultLoginKey,
 		}
 		data, _ := json.MarshalIndent(cfg, "", "  ")
 		_ = os.WriteFile(configPath, data, 0600)
@@ -129,6 +132,7 @@ func loadOrGenerateConfig() Config {
 			Token:    "temporary_token",
 			Email:    defaultEmail,
 			Password: defaultPassword,
+			LoginKey: defaultLoginKey,
 		}
 	}
 
@@ -139,6 +143,7 @@ func loadOrGenerateConfig() Config {
 			Token:    "temporary_token",
 			Email:    defaultEmail,
 			Password: defaultPassword,
+			LoginKey: defaultLoginKey,
 		}
 	}
 
@@ -148,9 +153,12 @@ func loadOrGenerateConfig() Config {
 	if cfg.Password == "" {
 		cfg.Password = defaultPassword
 	}
+	if cfg.LoginKey == "" {
+		cfg.LoginKey = defaultLoginKey
+	}
 
 	// Save back to config.json if there were missing fields
-	if cfg.Email == defaultEmail || cfg.Password == defaultPassword {
+	if cfg.Email == defaultEmail || cfg.Password == defaultPassword || cfg.LoginKey == defaultLoginKey {
 		data, _ = json.MarshalIndent(cfg, "", "  ")
 		_ = os.WriteFile(configPath, data, 0600)
 	}
@@ -607,6 +615,7 @@ func cleanupOldFiles() {
 type LoginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+	Key      string `json:"key"`
 }
 
 type LoginResponse struct {
@@ -630,21 +639,21 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.TrimSpace(req.Email) == "" || strings.TrimSpace(req.Password) == "" {
+	if strings.TrimSpace(req.Email) == "" || strings.TrimSpace(req.Password) == "" || strings.TrimSpace(req.Key) == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(LoginResponse{Status: "error", Error: "Email and password cannot be empty"})
+		json.NewEncoder(w).Encode(LoginResponse{Status: "error", Error: "Email, password, and URL key cannot be empty"})
 		return
 	}
 
-	if req.Email == globalConfig.Email && req.Password == globalConfig.Password {
+	if req.Email == globalConfig.Email && req.Password == globalConfig.Password && req.Key == globalConfig.LoginKey {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(LoginResponse{Status: "success", Token: globalConfig.Token})
 		return
 	}
 
-	log.Printf("[%s] Failed login attempt for email: %s", r.RemoteAddr, req.Email)
+	log.Printf("[%s] Failed login attempt for email: %s with key: %s", r.RemoteAddr, req.Email, req.Key)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
-	json.NewEncoder(w).Encode(LoginResponse{Status: "error", Error: "Invalid email or password"})
+	json.NewEncoder(w).Encode(LoginResponse{Status: "error", Error: "Invalid credentials or URL parameter key"})
 }

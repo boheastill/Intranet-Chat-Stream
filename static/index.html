@@ -690,7 +690,7 @@
 
             <button id="btnLogin" class="submit-btn" style="width: 100%; justify-content: center; padding: 0.8rem 1rem; font-size: 0.95rem; border-radius: 0.75rem;">验证并进入</button>
             
-            <div style="margin-top: 0.5rem;">
+            <div style="margin-top: 0.5rem; display: none;" id="toggleLoginContainer">
                 <a href="#" id="toggleLoginMode" style="color: var(--text-secondary); font-size: 0.8rem; text-decoration: underline; cursor: pointer; transition: color 0.2s;">使用邮箱密码登录</a>
             </div>
         </div>
@@ -723,6 +723,7 @@
         let isPolling = false;
         let pollingInterval = null;
         let loginMode = 'token'; // 'token' or 'email'
+        let loginKey = ''; // Holds URL parameter key for emergency login gateway
 
         // Initialize Authentication flow
         initAuth();
@@ -737,10 +738,18 @@
                 window.history.replaceState({}, document.title, window.location.pathname);
             }
 
-            // Detect if emergency login or special login page is requested via URL parameter
-            const loginParam = urlParams.get('login');
-            const emergencyParam = urlParams.get('emergency');
-            const showEmailLogin = loginParam === '1' || emergencyParam === '1' || emergencyParam === 'true';
+            // Detect if emergency login key is present in the URL parameter
+            const keyParam = urlParams.get('key') || urlParams.get('emergency');
+            const toggleContainer = document.getElementById('toggleLoginContainer');
+            
+            if (keyParam) {
+                loginKey = keyParam.trim();
+                // Reveal the email/password switch link
+                toggleContainer.style.display = 'block';
+            }
+
+            // Only switch to email login directly if the key parameter is valid in URL
+            const showEmailLogin = (keyParam !== null) && (urlParams.get('login') === '1' || urlParams.get('emergency') !== null);
 
             // 2. Load token from localStorage
             token = localStorage.getItem('ics_token');
@@ -838,7 +847,7 @@
                     const response = await fetch('/api/login', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ email, password })
+                        body: JSON.stringify({ email, password, key: loginKey })
                     });
 
                     if (!response.ok) {
@@ -856,7 +865,7 @@
                         throw new Error('未返回有效 Token');
                     }
                 } catch (err) {
-                    alert(err.message || '登录验证失败，请检查账户及密码');
+                    alert(err.message || '登录验证失败，请检查账户、密码及 URL 参数');
                     emailField.style.borderColor = 'var(--danger-color)';
                     passwordField.style.borderColor = 'var(--danger-color)';
                 } finally {

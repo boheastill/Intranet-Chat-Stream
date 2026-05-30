@@ -1,0 +1,21 @@
+# Binaries
+/clipstream
+/clipstream.exe
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Local storage and state
+/files/
+/config.json
+
+# IDE configurations
+.idea/
+.vscode/
+*.suo
+*.ntvsca
+*.ntvsct
+*.sln
+*.swp

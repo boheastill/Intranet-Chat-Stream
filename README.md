@@ -8,7 +8,7 @@ ICS-Core 是一个超轻量级、零数据库（DB-Less）、面向“人机协�
 
 ## 1. 核心架构哲学 (Dumb Pipe & Smart Consumers)
 
-*   **ICS-Core (哑管道 / Go)**：定位为无状态、高并发、高稳定的数据流通道，只负责文本/文件存盘、检索及空间滚动清理。
+*   **ICS-Core (哑管道 / Go)**：定位为无状态、高并发、高稳定的数据流通道，只负责文本/文件存盘、检索、磁盘容量统计及空间滚动清理。
 *   **Consumers (智能消费者 / Python/JS)**：包括您的手机/电脑 Web 前端、本地 AI 自动化 Agent（如任务抓取、通知推送脚本）。它们通过标准的 API Header Token 进行鉴权消费，随时重构，与核心服务彻底解耦。
 
 ---
@@ -17,25 +17,27 @@ ICS-Core 是一个超轻量级、零数据库（DB-Less）、面向“人机协�
 
 ```text
 ssh-connect/
-├── main.go               # Go 后端路由与核心业务逻辑（自包含，零三方库依赖）
-├── static/
-│   └── index.html        # 单页面现代暗黑 Web 前端（磨砂玻璃拟态设计）
-├── files/                # 物理存储剪贴板历史文件和图片（运行自动创建，git已忽略）
-├── config.json           # 存储您的静态访问密钥 Token（运行自动生成，git已忽略）
-├── .gitignore            # 排除编译目标及本地状态数据
-└── README.md             # 本说明文档
+└── ics-core/             # 代码根目录
+    ├── main.go           # Go 后端路由与核心业务逻辑（自包含，仅依赖 sync/net/http 等标准库）
+    ├── static/
+    │   └── index.html    # 单页面现代暗黑 Web 前端（磨砂玻璃拟态 + 设备检测 + 登出）
+    ├── files/            # 物理存储剪贴板历史文件和图片（运行自动创建，git已忽略）
+    ├── config.json       # 配置文件，包含 Token、登录暗号、密保密码（运行自动生成，git已忽略）
+    ├── .gitignore        # 排除编译目标及本地状态数据
+    └── README.md         # 本说明文档
 ```
 
 ---
 
-## 3. 安全防护体系 (Security Model)
+## 3. 安全防护与登录体系 (Security & Auth Model)
 
-*   **零入站防火墙 (Cloudflare Tunnel)**：VPS 本地服务仅监听 `127.0.0.1:6666`。外部攻击者及全网扫描器无法从公网直接探测该端口。所有请求均由 VPS 主动出站连接 Cloudflare 隧道进行加密中转。
-*   **应用层 Token 验证 (Header / Query)**：
-    *   API 接口均需验证 `X-Auth-Token` 头部。
-    *   图片及二进制文件下载链接支持从 URL 参数中校验 `?token=`。
-    *   未认证访问直接返回 `401 Unauthorized` 阻断。
-*   **路径穿透清洗**：所有文件读写动作均执行严格的 `filepath` 安全防线校验，杜绝 `../` 等黑客恶意文件读取注入。
+*   **零入站公网防火墙 (Cloudflare Tunnel)**：VPS 本地服务仅监听 `127.0.0.1:6666`。外部攻击者及全网扫描器无法从公网直接探测该端口。所有请求均由 VPS 主动出站连接 Cloudflare 隧道进行加密中转。
+*   **双模式身份鉴权**：
+    *   **Token 直接鉴权**：API 请求均需在 HTTP 头部携带 `X-Auth-Token`。图片及二进制文件下载链接支持从 URL 参数中校验 `?token=`。
+    *   **Stealth Key 隐形应急门禁**：在新设备/临时环境下，默认访问只显示 Token 鉴权框（完全隐藏密码登录选项）。只有在访问 URL 带有匹配的暗号参数时（如 `?key=vip`），前端才会解锁呈现「使用密保密码登录」的选项。输入 8 位简单密保密码（默认 `66666666`）验证通过后，后端安全分发 Token。
+*   **IP 级别指数退避防爆破（Exponential Backoff）**：密码登录接口对每个尝试的 IP 地址进行单独计数。一旦验证失败，该 IP 地址的重试等待惩罚按 $2^{(n-1)}$ 秒呈指数增长（最高延迟 60 秒），彻底瓦解高频暴力攻击。
+    *   **CF IP 真实捕获**：后端自动读取 `CF-Connecting-IP` 报头，确保与 Cloudflare 隧道中转时，防爆破锁死能够准确隔离黑客 IP，绝不影响属主用户的 IP 正常访问。
+*   **路径防穿透清洗**：所有文件读写动作均执行严格的 `filepath` 安全防线校验，杜绝 `../` 等黑客恶意文件读取注入。
 
 ---
 
@@ -47,11 +49,15 @@ ssh-connect/
 # 启动本地开发服务
 go run main.go
 ```
-首次运行会在项目目录下生成 `config.json`，并打印系统自动产生的 32 位安全 Token。
+首次运行会在项目目录下自动生成 `config.json`，并打印系统自动产生的 32 位安全 Token。默认配置为：
+*   `token`：随机产生 32 位密钥
+*   `password`：`66666666`（密保密码）
+*   `login_key`：`vip`（隐藏 URL 暗号）
 
 ### 4.2 访问系统
 *   浏览器打开 `http://127.0.0.1:6666`。
 *   根据提示输入终端打印的 Token，即可开始使用。
+*   应急状态下访问 `http://127.0.0.1:6666/?key=vip`，切换并输入密保密码 `66666666` 登录。
 
 ---
 
@@ -68,7 +74,7 @@ go build -o clipstream
 ### 5.2 部署目录配置
 通过 SCP/SFTP 将编译好的 `clipstream` 二进制文件与 `static/` 文件夹上传到 VPS 的 `/home/admin/clipstream/` 目录下。
 
-### 5.3 配置守护进程 (systemd)
+### 5.3 配置systemd守护进程
 创建 `/etc/systemd/system/clipstream.service`：
 ```ini
 [Unit]
@@ -97,35 +103,72 @@ sudo systemctl enable clipstream --now
 ## 6. API 协议规范 (API Contract)
 
 ### 6.1 `GET /api/list` (拉取消息流)
-*   **鉴权 Header**：`X-Auth-Token: [您的密钥]`
+*   **请求 Header**：`X-Auth-Token: [您的密钥]`
+*   **响应 Header**（附带容量指标）：
+    *   `X-Quota-Used`：当前 `./files` 已占用字节数 (bytes)
+    *   `X-Quota-Limit`：总磁盘空间配额字节数 (默认 2147483648 bytes, 即 2GB)
 *   **响应示例** (按时间戳倒序)：
     ```json
     [
       {
-        "id": "1780167900_text.txt",
+        "id": "1780167900_pc_text.txt",
         "type": "text",
         "content": "验证码: 9981",
         "time": "2026-05-31 03:05:00",
-        "pinned": false
+        "pinned": false,
+        "device": "pc"
+      },
+      {
+        "id": "1780168200_mobile_screenshot.png",
+        "type": "file",
+        "filename": "screenshot.png",
+        "size": "150 KB",
+        "time": "2026-05-31 03:10:00",
+        "pinned": true,
+        "device": "mobile"
       }
     ]
     ```
 
 ### 6.2 `POST /api/push` (投送文本/文件)
-*   **鉴权 Header**：`X-Auth-Token: [您的密钥]`
+*   **请求 Header**：`X-Auth-Token: [您的密钥]`
 *   **请求体** (Multipart Form)：
     *   `text` (可选，String)：文本框输入
     *   `file` (可选，File)：上传的文件
+    *   `device` (可选，String)：设备标识，支持 `pc`, `mobile`, `ai`, `web`。缺省默认为 `pc`。
 *   **响应示例**：
     ```json
-    {"id":"1780167900_text.txt","status":"success"}
+    {"id":"1780167900_ai_text.txt","status":"success"}
     ```
 
-### 6.3 `POST /api/action` (锁定置顶/删除卡片)
-*   **鉴权 Header**：`X-Auth-Token: [您的密钥]`
+### 6.3 `POST /api/login` (密保密码登录)
 *   **请求体** (JSON)：
     ```json
-    {"id": "1780167900_text.txt", "action": "pin"} 
+    {
+      "password": "密保密码",
+      "key": "URL参数中的验证暗号Key"
+    }
+    ```
+*   **响应示例 (成功)**：
+    ```json
+    {
+      "status": "success",
+      "token": "006e91db7de25746bd029895f9e5f45b"
+    }
+    ```
+*   **响应示例 (等待限速锁定中 - Status 429)**：
+    ```json
+    {
+      "status": "error",
+      "error": "尝试次数过多，请等待 12 秒后重试"
+    }
+    ```
+
+### 6.4 `POST /api/action` (置顶/取消置顶/删除卡片)
+*   **请求 Header**：`X-Auth-Token: [您的密钥]`
+*   **请求体** (JSON)：
+    ```json
+    {"id": "1780167900_pc_text.txt", "action": "pin"} 
     // 支持 action: "pin" (置顶保护), "unpin" (取消置顶), "delete" (物理删除)
     ```
 
@@ -143,14 +186,19 @@ headers = {
     "X-Auth-Token": TOKEN
 }
 
-# 1. 拉取当前待处理流
+# 1. 拉取当前待处理流并检测容量
 res = requests.get(f"{BASE_URL}/api/list", headers=headers)
+quota_used = res.headers.get("X-Quota-Used")
+quota_limit = res.headers.get("X-Quota-Limit")
+print(f"已用容量: {int(quota_used)/1024/1024:.2f} MB / 限额 {int(quota_limit)/1024/1024/1024:.1f} GB")
+
 messages = res.json()
 print("当前流中消息数量:", len(messages))
 
-# 2. 推送处理完毕的消息
+# 2. 推送处理完毕的消息，指定设备标签为 'ai'
 payload = {
-    "text": "🤖 AI Agent 分析完毕：待提取验证码为 [9981]"
+    "text": "🤖 AI Agent 分析完毕：待提取验证码为 [9981]",
+    "device": "ai"
 }
 res_push = requests.post(f"{BASE_URL}/api/push", headers=headers, data=payload)
 print("推送结果:", res_push.json())

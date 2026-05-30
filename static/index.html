@@ -924,6 +924,15 @@
             }
         }
 
+        // Utility to format sizes in JS
+        function formatSizeHelper(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
         // Fetch stream list
         async function fetchList() {
             if (isPolling) return;
@@ -950,11 +959,17 @@
                     lastListHash = listHash;
                 }
 
-                // Update latency indicator
+                // Update latency indicator and storage quota
                 const latency = Date.now() - startTime;
                 statusDot.classList.remove('error');
                 statusDot.classList.add('pulse');
-                statusText.innerText = `同步成功 (${latency}ms)`;
+                
+                const usedBytes = parseInt(response.headers.get('X-Quota-Used') || '0');
+                const limitBytes = parseInt(response.headers.get('X-Quota-Limit') || '2147483648');
+                const usedStr = formatSizeHelper(usedBytes);
+                const limitStr = formatSizeHelper(limitBytes);
+
+                statusText.innerText = `同步成功 (${latency}ms) | ${usedStr} / ${limitStr}`;
             } catch (err) {
                 console.error(err);
                 statusDot.classList.add('error');

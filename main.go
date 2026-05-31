@@ -283,13 +283,35 @@ func parseFilename(filename string) (*Message, error) {
 
 	if origName == "text.txt" {
 		msg.Type = "text"
-		// Read content
 		filePath := filepath.Join(filesDir, filename)
-		contentBytes, err := os.ReadFile(filePath)
+		info, err := os.Stat(filePath)
 		if err != nil {
-			msg.Content = "[Error: failed to read text message]"
+			msg.Content = "[Error: failed to read text message info]"
 		} else {
-			msg.Content = string(contentBytes)
+			fileSize := info.Size()
+			const limit = 10 * 1024 // 10 KB
+			if fileSize <= limit {
+				contentBytes, err := os.ReadFile(filePath)
+				if err != nil {
+					msg.Content = "[Error: failed to read text message]"
+				} else {
+					msg.Content = string(contentBytes)
+				}
+			} else {
+				f, err := os.Open(filePath)
+				if err != nil {
+					msg.Content = "[Error: failed to open text message]"
+				} else {
+					defer f.Close()
+					buf := make([]byte, limit)
+					n, err := f.Read(buf)
+					if err != nil && err != io.EOF {
+						msg.Content = "[Error: failed to read partial text message]"
+					} else {
+						msg.Content = string(buf[:n]) + "\n... [内容过长已截断，请下载完整文件]"
+					}
+				}
+			}
 		}
 	} else {
 		msg.Type = "file"
@@ -397,6 +419,7 @@ func handlePush(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().Unix()
 	var createdID string
+	var pushSize int64
 
 	// 1. Check for text push
 	textVal := r.FormValue("text")
@@ -409,6 +432,7 @@ func handlePush(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		createdID = filename
+		pushSize = int64(len(textVal))
 	}
 
 	// 2. Check for file push
@@ -435,17 +459,21 @@ func handlePush(w http.ResponseWriter, r *http.Request) {
 		}
 		defer out.Close()
 
-		if _, err := io.Copy(out, file); err != nil {
+		n, err := io.Copy(out, file)
+		if err != nil {
 			http.Error(w, "Failed to save file data", http.StatusInternalServerError)
 			return
 		}
 		createdID = filename
+		pushSize = n
 	}
 
 	if createdID == "" {
 		http.Error(w, "Empty push request (no text or file)", http.StatusBadRequest)
 		return
 	}
+
+	log.Printf("[%s] PUSH SUCCESS: device=%s, id=%s, size=%s", getClientIP(r), device, createdID, formatSize(pushSize))
 
 	// Run rolling deletion to enforce max directory size
 	go cleanupOldFiles()
@@ -523,6 +551,8 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("[%s] ACTION SUCCESS: action=%s, id=%s", getClientIP(r), payload.Action, payload.ID)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
@@ -551,6 +581,8 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "File not found", http.StatusNotFound)
 		return
 	}
+
+	log.Printf("[%s] DOWNLOAD: id=%s", getClientIP(r), id)
 
 	// Parse out original filename for Content-Disposition header
 	msg, err := parseFilename(id)
@@ -630,9 +662,9 @@ func cleanupOldFiles() {
 		path := filepath.Join(filesDir, f.name)
 		if err := os.Remove(path); err == nil {
 			totalSize -= f.size
-			log.Printf("Cleaned up oldest unpinned file: %s (size: %s)", f.name, formatSize(f.size))
+			log.Printf("[SYSTEM] CLEANUP: removed oldest unpinned file %s (size: %s)", f.name, formatSize(f.size))
 		} else {
-			log.Printf("Cleanup warning: failed to delete file %s: %v", f.name, err)
+			log.Printf("[SYSTEM] CLEANUP WARNING: failed to delete file %s: %v", f.name, err)
 		}
 	}
 }
@@ -718,6 +750,8 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		attemptsMu.Lock()
 		delete(ipAttempts, ip)
 		attemptsMu.Unlock()
+
+		log.Printf("[%s] LOGIN SUCCESS: with key=%s", ip, req.Key)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(LoginResponse{Status: "success", Token: globalConfig.Token})

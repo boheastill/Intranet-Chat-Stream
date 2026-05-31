@@ -55,11 +55,44 @@ type IPAttempt struct {
 	LastTime  time.Time
 }
 
+type SSEClient struct {
+	Channel string
+	Message chan string
+}
+
+type Broadcaster struct {
+	clients sync.Map
+}
+
+func (b *Broadcaster) Register(client *SSEClient) {
+	b.clients.Store(client, true)
+}
+
+func (b *Broadcaster) Unregister(client *SSEClient) {
+	b.clients.Delete(client)
+	close(client.Message)
+}
+
+func (b *Broadcaster) Broadcast(channel string, eventPayload string) {
+	b.clients.Range(func(key, value interface{}) bool {
+		client := key.(*SSEClient)
+		if client.Channel == "" || client.Channel == channel {
+			select {
+			case client.Message <- eventPayload:
+			default:
+				// Drop if channel is full to prevent blocking
+			}
+		}
+		return true
+	})
+}
+
 var (
 	globalConfig Config
 	maxDirSize   int64 = 2 * 1024 * 1024 * 1024 // 2 GB
 	attemptsMu   sync.Mutex
 	ipAttempts   = make(map[string]IPAttempt)
+	globalBroadcaster = &Broadcaster{}
 )
 
 func main() {
@@ -88,8 +121,9 @@ func main() {
 	mux.HandleFunc("/api/list", handleList)
 	mux.HandleFunc("/api/push", handlePush)
 	mux.HandleFunc("/api/action", handleAction)
+	mux.HandleFunc("/api/stream", handleStream)
 	mux.HandleFunc("/api/login", handleLogin)
-	mux.HandleFunc("/download/", handleDownload)
+	mux.HandleFunc("/api/download/", handleDownload)
 	mux.HandleFunc("/", serveStatic)
 
 	// Apply Token authentication middleware
@@ -216,10 +250,22 @@ func serveStatic(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, safePath)
 }
 
+// getChannelDir extracts the channel query param and returns channel name and safe target directory
+func getChannelDir(r *http.Request) (string, string) {
+	channel := strings.TrimSpace(r.URL.Query().Get("channel"))
+	if channel != "" {
+		channel = strings.ReplaceAll(channel, "/", "")
+		channel = strings.ReplaceAll(channel, "\\", "")
+		channel = strings.ReplaceAll(channel, "..", "")
+		return channel, filepath.Join(filesDir, channel)
+	}
+	return "", filesDir
+}
+
 // getSafeFilePath validates and returns a clean, safe path to a file inside files/
 func getSafeFilePath(id string) (string, error) {
 	// Prevent path traversal
-	if strings.Contains(id, "/") || strings.Contains(id, "\\") || id == ".." || id == "." {
+	if strings.Contains(id, "..") {
 		return "", fmt.Errorf("invalid file ID")
 	}
 
@@ -241,7 +287,7 @@ func getSafeFilePath(id string) (string, error) {
 }
 
 // parseFilename parses metadata out of the actual filesystem filename
-func parseFilename(filename string) (*Message, error) {
+func parseFilename(filename string, targetDir string) (*Message, error) {
 	// Standard: [pinned_]?[timestamp]_[device]_[original_name] or legacy: [pinned_]?[timestamp]_[original_name]
 	msg := &Message{
 		ID:     filename,
@@ -283,7 +329,7 @@ func parseFilename(filename string) (*Message, error) {
 
 	if origName == "text.txt" {
 		msg.Type = "text"
-		filePath := filepath.Join(filesDir, filename)
+		filePath := filepath.Join(targetDir, filename)
 		info, err := os.Stat(filePath)
 		if err != nil {
 			msg.Content = "[Error: failed to read text message info]"
@@ -317,7 +363,7 @@ func parseFilename(filename string) (*Message, error) {
 		msg.Type = "file"
 		msg.Filename = origName
 		// Get size
-		filePath := filepath.Join(filesDir, filename)
+		filePath := filepath.Join(targetDir, filename)
 		info, err := os.Stat(filePath)
 		if err == nil {
 			msg.Size = formatSize(info.Size())
@@ -349,26 +395,42 @@ func handleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entries, err := os.ReadDir(filesDir)
+	channel, targetDir := getChannelDir(r)
+
+	entries, err := os.ReadDir(targetDir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			w.Header().Set("X-Quota-Used", "0")
+			w.Header().Set("X-Quota-Limit", strconv.FormatInt(maxDirSize, 10))
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode([]Message{})
+			return
+		}
 		http.Error(w, "Failed to read storage directory", http.StatusInternalServerError)
 		return
 	}
 
+	// Calculate total global size
 	var totalSize int64
+	filepath.Walk(filesDir, func(path string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			totalSize += info.Size()
+		}
+		return nil
+	})
+
 	messages := make([]Message, 0)
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
-		info, err := entry.Info()
-		if err == nil {
-			totalSize += info.Size()
-		}
-		msg, err := parseFilename(entry.Name())
+		msg, err := parseFilename(entry.Name(), targetDir)
 		if err != nil {
 			// Skip files that do not match the expected pattern
 			continue
+		}
+		if channel != "" {
+			msg.ID = channel + "/" + msg.ID
 		}
 		messages = append(messages, *msg)
 	}
@@ -386,7 +448,7 @@ func handleList(w http.ResponseWriter, r *http.Request) {
 }
 
 func getTimestampFromID(id string) int64 {
-	name := id
+	name := filepath.Base(id)
 	if strings.HasPrefix(name, "pinned_") {
 		name = strings.TrimPrefix(name, "pinned_")
 	}
@@ -421,17 +483,25 @@ func handlePush(w http.ResponseWriter, r *http.Request) {
 	var createdID string
 	var pushSize int64
 
+	channel, targetDir := getChannelDir(r)
+	if channel != "" {
+		os.MkdirAll(targetDir, 0755)
+	}
+
 	// 1. Check for text push
 	textVal := r.FormValue("text")
 	if strings.TrimSpace(textVal) != "" {
 		filename := fmt.Sprintf("%d_%s_text.txt", now, device)
-		filePath := filepath.Join(filesDir, filename)
+		filePath := filepath.Join(targetDir, filename)
 
 		if err := os.WriteFile(filePath, []byte(textVal), 0644); err != nil {
 			http.Error(w, "Failed to write text file", http.StatusInternalServerError)
 			return
 		}
 		createdID = filename
+		if channel != "" {
+			createdID = channel + "/" + createdID
+		}
 		pushSize = int64(len(textVal))
 	}
 
@@ -450,7 +520,7 @@ func handlePush(w http.ResponseWriter, r *http.Request) {
 		}
 
 		filename := fmt.Sprintf("%d_%s_%s", now, device, origFilename)
-		filePath := filepath.Join(filesDir, filename)
+		filePath := filepath.Join(targetDir, filename)
 
 		out, err := os.Create(filePath)
 		if err != nil {
@@ -465,6 +535,9 @@ func handlePush(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		createdID = filename
+		if channel != "" {
+			createdID = channel + "/" + createdID
+		}
 		pushSize = n
 	}
 
@@ -478,12 +551,58 @@ func handlePush(w http.ResponseWriter, r *http.Request) {
 	// Run rolling deletion to enforce max directory size
 	go cleanupOldFiles()
 
+	// Broadcast SSE event
+	eventPayload := fmt.Sprintf("data: {\"event\":\"new_msg\",\"channel\":\"%s\",\"id\":\"%s\"}\n\n", channel, createdID)
+	globalBroadcaster.Broadcast(channel, eventPayload)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{
 		"status": "success",
 		"id":     createdID,
 	})
+}
+
+// handleStream handles SSE long-polling connections
+func handleStream(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	channel := strings.TrimSpace(r.URL.Query().Get("channel"))
+
+	client := &SSEClient{
+		Channel: channel,
+		Message: make(chan string, 10),
+	}
+	globalBroadcaster.Register(client)
+	defer globalBroadcaster.Unregister(client)
+
+	// Send initial connection success event
+	fmt.Fprintf(w, "data: {\"event\":\"connected\"}\n\n")
+	flusher.Flush()
+
+	notify := r.Context().Done()
+	for {
+		select {
+		case <-notify:
+			return
+		case msg := <-client.Message:
+			fmt.Fprint(w, msg)
+			flusher.Flush()
+		}
+	}
 }
 
 // handleAction processes pin, unpin, or delete on a specific card
@@ -513,8 +632,13 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 
 	switch payload.Action {
 	case "pin":
-		if !strings.HasPrefix(payload.ID, "pinned_") {
-			newID := "pinned_" + payload.ID
+		filename := filepath.Base(payload.ID)
+		if !strings.HasPrefix(filename, "pinned_") {
+			newID := "pinned_" + filename
+			dirPath := filepath.Dir(payload.ID)
+			if dirPath != "." && dirPath != "" && dirPath != string(filepath.Separator) {
+				newID = filepath.ToSlash(filepath.Join(dirPath, newID))
+			}
 			newPath, err := getSafeFilePath(newID)
 			if err != nil {
 				http.Error(w, "Invalid target ID for pin", http.StatusBadRequest)
@@ -527,8 +651,13 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case "unpin":
-		if strings.HasPrefix(payload.ID, "pinned_") {
-			newID := strings.TrimPrefix(payload.ID, "pinned_")
+		filename := filepath.Base(payload.ID)
+		if strings.HasPrefix(filename, "pinned_") {
+			newID := strings.TrimPrefix(filename, "pinned_")
+			dirPath := filepath.Dir(payload.ID)
+			if dirPath != "." && dirPath != "" && dirPath != string(filepath.Separator) {
+				newID = filepath.ToSlash(filepath.Join(dirPath, newID))
+			}
 			newPath, err := getSafeFilePath(newID)
 			if err != nil {
 				http.Error(w, "Invalid target ID for unpin", http.StatusBadRequest)
@@ -564,8 +693,8 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The id is everything after "/download/"
-	id := strings.TrimPrefix(r.URL.Path, "/download/")
+	// The id is everything after "/api/download/"
+	id := strings.TrimPrefix(r.URL.Path, "/api/download/")
 	if id == "" {
 		http.Error(w, "Missing file ID", http.StatusBadRequest)
 		return
@@ -585,8 +714,8 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[%s] DOWNLOAD: id=%s", getClientIP(r), id)
 
 	// Parse out original filename for Content-Disposition header
-	msg, err := parseFilename(id)
-	origFilename := id
+	msg, err := parseFilename(filepath.Base(id), filepath.Dir(safePath))
+	origFilename := filepath.Base(id)
 	if err == nil {
 		if msg.Type == "text" {
 			origFilename = "text.txt"
@@ -605,13 +734,8 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 
 // cleanupOldFiles traverses filesDir and removes oldest unpinned files if total exceeds limit
 func cleanupOldFiles() {
-	entries, err := os.ReadDir(filesDir)
-	if err != nil {
-		log.Printf("Cleanup warning: failed to read files directory: %v", err)
-		return
-	}
-
 	type fileInfo struct {
+		path string
 		name string
 		size int64
 		ts   int64
@@ -620,27 +744,26 @@ func cleanupOldFiles() {
 	var totalSize int64
 	unpinnedFiles := make([]fileInfo, 0)
 
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
+	err := filepath.Walk(filesDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
 		}
-
-		info, err := entry.Info()
-		if err != nil {
-			continue
-		}
-
 		totalSize += info.Size()
-
-		// Filter unpinned files
-		if !strings.HasPrefix(entry.Name(), "pinned_") {
-			ts := getTimestampFromID(entry.Name())
+		name := filepath.Base(path)
+		if !strings.HasPrefix(name, "pinned_") {
+			ts := getTimestampFromID(name)
 			unpinnedFiles = append(unpinnedFiles, fileInfo{
-				name: entry.Name(),
+				path: path,
+				name: name,
 				size: info.Size(),
 				ts:   ts,
 			})
 		}
+		return nil
+	})
+
+	if err != nil {
+		log.Printf("Cleanup warning: failed to walk files directory: %v", err)
 	}
 
 	log.Printf("Current Storage Size: %s / Max quota: %s", formatSize(totalSize), formatSize(maxDirSize))
@@ -659,8 +782,7 @@ func cleanupOldFiles() {
 			break
 		}
 
-		path := filepath.Join(filesDir, f.name)
-		if err := os.Remove(path); err == nil {
+		if err := os.Remove(f.path); err == nil {
 			totalSize -= f.size
 			log.Printf("[SYSTEM] CLEANUP: removed oldest unpinned file %s (size: %s)", f.name, formatSize(f.size))
 		} else {

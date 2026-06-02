@@ -1,6 +1,7 @@
 // Package pipeline is the SSE consumer, AI router, and knowledge base.
 // It runs as a goroutine alongside the Message Bus: it listens for new
-// messages, routes @cc triggers to an AI backend, and pushes the reply back.
+// messages, and when one carries a trigger token (see ai.Triggers — @ds, @mi,
+// @ag, @cc) it routes to the mapped AI backend and pushes the reply back.
 package pipeline
 
 import (
@@ -24,7 +25,6 @@ const (
 	busStreamURL   = busBaseURL + "/api/stream"
 	busPushURL     = busBaseURL + "/api/push"
 	busDownloadURL = busBaseURL + "/api/download/"
-	triggerToken   = "@cc"
 	seenStatePath  = "pipeline.seen.json"
 	knowledgePath  = "pipeline.knowledge.json"
 )
@@ -49,12 +49,13 @@ func Start(token string) {
 	backends = map[string]ai.Backend{
 		"template": ai.NewTemplate(),
 		"deepseek": ai.NewDeepSeek(),
+		"mimo":     ai.NewMiMo(),
 	}
 
 	loadSeen()
 
-	log.Printf("[pipeline] Backends: template, deepseek")
-	log.Printf("[pipeline] SSE: %s  Trigger: %s", busStreamURL, triggerToken)
+	log.Printf("[pipeline] Backends: template, deepseek, mimo")
+	log.Printf("[pipeline] SSE: %s  Triggers: %s", busStreamURL, strings.Join(ai.TriggerTokens(), " "))
 
 	for {
 		if err := listenSSE(); err != nil {
@@ -107,18 +108,19 @@ func listenSSE() error {
 
 func handleMessage(id, channel string) {
 	content := downloadMessage(id)
-	if content == "" || !strings.Contains(content, triggerToken) {
+	token, _, ok := ai.MatchTrigger(content)
+	if content == "" || !ok {
 		return
 	}
 	device := extractDevice(id)
-	log.Printf("[pipeline] @cc from %s", device)
+	log.Printf("[pipeline] %s from %s", token, device)
 
 	msg := ai.Message{
 		ID:      id,
 		Content: content,
 		Device:  device,
 		Channel: channel,
-		Trigger: triggerToken,
+		Trigger: token,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)

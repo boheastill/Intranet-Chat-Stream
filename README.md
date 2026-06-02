@@ -30,9 +30,9 @@ ics-core/                 # Go module `ics`
 │   ├── config.go         #   Config 加载/生成
 │   ├── broadcaster.go    #   SSE 广播
 │   └── auth.go           #   Token 中间件 + 登录指数退避
-├── pipeline/             # Pipeline（核心）：SSE 消费 → @cc 路由 → AI → 回复
+├── pipeline/             # Pipeline（核心）：SSE 消费 → 触发词路由 → AI → 回复
 │   └── pipeline.go
-├── ai/                   # AI Backend 接口 + Template + DeepSeek
+├── ai/                   # AI Backend 接口 + Template + DeepSeek + MiMo + router(触发词路由表)
 ├── knowledge/            # 文件级知识库（关键词检索）
 ├── static/
 │   └── index.html        # 单页面现代 Web 前端（磨砂玻璃 + 设备检测 + 登出）

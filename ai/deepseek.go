@@ -21,9 +21,6 @@ type DeepSeekBackend struct {
 
 func NewDeepSeek() *DeepSeekBackend {
 	key := os.Getenv("DEEPSEEK_API_KEY")
-	if key == "" {
-		key = "sk-1be4ea85114c4b28b3ada0b8a660a9f9"
-	}
 	return &DeepSeekBackend{
 		apiKey:  key,
 		baseURL: "https://api.deepseek.com/v1",
@@ -35,9 +32,13 @@ func NewDeepSeek() *DeepSeekBackend {
 func (d *DeepSeekBackend) Name() string { return "deepseek" }
 
 func (d *DeepSeekBackend) Process(ctx context.Context, msg Message, knowledge []Entry) (*Response, error) {
+	if d.apiKey == "" {
+		return nil, fmt.Errorf("deepseek: DEEPSEEK_API_KEY not set")
+	}
+
 	systemPrompt := buildSystemPrompt(knowledge)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"model": d.model,
 		"messages": []map[string]string{
 			{"role": "system", "content": systemPrompt},
@@ -87,7 +88,7 @@ func buildSystemPrompt(knowledge []Entry) string {
 	if len(knowledge) > 0 {
 		sb.WriteString("\n--- Context ---\n")
 		for _, e := range knowledge {
-			sb.WriteString(fmt.Sprintf("[%s] %s\n", e.Topic, e.Content))
+			fmt.Fprintf(&sb, "[%s] %s\n", e.Topic, e.Content)
 		}
 	}
 

@@ -97,7 +97,7 @@ func buildMiMoSystemPrompt(knowledge []Entry) string {
 	sb.WriteString("Current time: " + time.Now().Format("2006-01-02 15:04:05") + "\n")
 
 	if len(knowledge) > 0 {
-		sb.WriteString("\n--- Context ---\n")
+		sb.WriteString("\n--- Authoritative facts about ICS (ground truth; do not contradict) ---\n")
 		for _, e := range knowledge {
 			fmt.Fprintf(&sb, "[%s] %s\n", e.Topic, e.Content)
 		}

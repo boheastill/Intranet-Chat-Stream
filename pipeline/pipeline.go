@@ -133,7 +133,6 @@ func handleMessage(id, channel string) {
 	if err == nil && resp != nil && resp.Text != "" {
 		log.Printf("[pipeline] template: %s", truncate(resp.Text, 60))
 		pushReply(resp.Text, "ai")
-		kb.RecordConversation("last_reply", truncate(resp.Text, 200))
 		return
 	}
 
@@ -151,7 +150,6 @@ func handleMessage(id, channel string) {
 			if aiResp.Text != "" {
 				log.Printf("[pipeline] %s: %s", target, truncate(aiResp.Text, 60))
 				pushReply(aiResp.Text, "ai")
-				kb.RecordConversation("last_reply", truncate(aiResp.Text, 200))
 				return
 			}
 		}

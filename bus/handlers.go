@@ -105,7 +105,8 @@ func handlePush(w http.ResponseWriter, r *http.Request) {
 	// 1. Check for text push
 	textVal := r.FormValue("text")
 	if strings.TrimSpace(textVal) != "" {
-		filename := fmt.Sprintf("%d_%s_text.txt", now, device)
+		ts := uniqueTimestamp(targetDir, now, device, "text.txt")
+		filename := fmt.Sprintf("%d_%s_text.txt", ts, device)
 		filePath := filepath.Join(targetDir, filename)
 
 		if err := os.WriteFile(filePath, []byte(textVal), 0644); err != nil {
@@ -133,7 +134,8 @@ func handlePush(w http.ResponseWriter, r *http.Request) {
 			origFilename = "unnamed_file"
 		}
 
-		filename := fmt.Sprintf("%d_%s_%s", now, device, origFilename)
+		ts := uniqueTimestamp(targetDir, now, device, origFilename)
+		filename := fmt.Sprintf("%d_%s_%s", ts, device, origFilename)
 		filePath := filepath.Join(targetDir, filename)
 
 		out, err := os.Create(filePath)

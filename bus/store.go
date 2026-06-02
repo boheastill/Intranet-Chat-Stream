@@ -154,6 +154,21 @@ func parseFilename(filename string, targetDir string) (*Message, error) {
 	return msg, nil
 }
 
+// uniqueTimestamp returns the smallest timestamp >= start for which
+// "<ts>_<device>_<suffix>" does not yet exist in dir. Filenames are keyed by
+// second, so two same-second pushes would otherwise overwrite each other and
+// silently lose a message; nudging the timestamp forward keeps each push distinct.
+func uniqueTimestamp(dir string, start int64, device, suffix string) int64 {
+	ts := start
+	for {
+		name := fmt.Sprintf("%d_%s_%s", ts, device, suffix)
+		if _, err := os.Stat(filepath.Join(dir, name)); os.IsNotExist(err) {
+			return ts
+		}
+		ts++
+	}
+}
+
 func formatSize(size int64) string {
 	const unit = 1024
 	if size < unit {

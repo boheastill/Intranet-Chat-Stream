@@ -79,14 +79,13 @@ func (d *DeepSeekBackend) Process(ctx context.Context, msg Message, knowledge []
 
 func buildSystemPrompt(knowledge []Entry) string {
 	var sb strings.Builder
-	sb.WriteString("You are bohea's AI assistant running in ICS-Pipeline Mode C.\n")
-	sb.WriteString("Your brain is DeepSeek API (deepseek-chat), invoked by a Go binary.\n")
-	sb.WriteString("You are ICS-Pipeline DeepSeek backend, invoked by a Go binary.\n")
-	sb.WriteString("Reply concisely, accurately, max 3 sentences.\n")
+	sb.WriteString("You are bohea's AI assistant running in ICS (Intranet Chat Stream), Mode C.\n")
+	sb.WriteString("Your brain is the DeepSeek API (deepseek-chat), invoked by a Go pipeline.\n")
+	sb.WriteString("Reply concisely and accurately, max 3 sentences.\n")
 	sb.WriteString("Current time: " + time.Now().Format("2006-01-02 15:04:05") + "\n")
 
 	if len(knowledge) > 0 {
-		sb.WriteString("\n--- Context ---\n")
+		sb.WriteString("\n--- Authoritative facts about ICS (ground truth; do not contradict) ---\n")
 		for _, e := range knowledge {
 			fmt.Fprintf(&sb, "[%s] %s\n", e.Topic, e.Content)
 		}

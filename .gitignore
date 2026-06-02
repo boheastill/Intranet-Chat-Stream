@@ -1,15 +1,19 @@
 # Binaries
+/ics
+/ics.exe
 /clipstream
-/clipstream.exe
+/clipstream-linux
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
 
-# Local storage and state
+# Local storage and runtime state
 /files/
 /config.json
+/pipeline.seen.json
+/pipeline.knowledge.json
 
 # IDE configurations
 .idea/

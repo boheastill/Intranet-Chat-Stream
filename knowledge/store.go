@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"clipstream/ai"
+	"ics/ai"
 )
 
 // Store is a simple file-based knowledge base.

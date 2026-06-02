@@ -129,6 +129,9 @@ func main() {
 	// Apply Token authentication middleware
 	handlerWithMiddleware := tokenAuthMiddleware(mux, globalConfig.Token)
 
+	// Start Pipeline as background goroutine
+	go startPipeline()
+
 	// Listen only on 127.0.0.1 for maximum loopback security (Cloudflare Tunnel forwards locally)
 	bindAddr := "127.0.0.1" + port
 	log.Printf("Starting ICS-Core server locally on %s...", bindAddr)

@@ -168,7 +168,7 @@ sudo systemctl enable ics --now
     ```json
     {
       "status": "success",
-      "token": "REDACTED_TOKEN"
+      "token": "<your-token-from-config.json>"
     }
     ```
 *   **响应示例 (等待限速锁定中 - Status 429)**：
@@ -194,7 +194,7 @@ sudo systemctl enable ics --now
 ```python
 import requests
 
-TOKEN = "REDACTED_TOKEN"  # 替换为 config.json 里的真实 Token
+TOKEN = "<your-token>"  # 替换为 config.json 里的真实 Token
 BASE_URL = "https://flow.bohea.us"
 
 headers = {

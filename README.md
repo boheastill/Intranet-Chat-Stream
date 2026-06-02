@@ -21,15 +21,25 @@ ICS-Core 是一个超轻量级、零数据库（DB-Less）、面向“人机协�
 ## 2. 目录布局 (Directory Layout)
 
 ```text
-ssh-connect/
-└── ics-core/             # 代码根目录
-    ├── main.go           # Go 后端路由与核心业务逻辑（自包含，仅依赖 sync/net/http 等标准库）
-    ├── static/
-    │   └── index.html    # 单页面现代暗黑 Web 前端（磨砂玻璃拟态 + 设备检测 + 登出）
-    ├── files/            # 物理存储剪贴板历史文件和图片（运行自动创建，git已忽略）
-    ├── config.json       # 配置文件，包含 Token、登录暗号、密保密码（运行自动生成，git已忽略）
-    ├── .gitignore        # 排除编译目标及本地状态数据
-    └── README.md         # 本说明文档
+ics-core/                 # Go module `ics`
+├── main.go               # 启动装配：加载配置 → 启动 pipeline → 运行 bus
+├── bus/                  # Message Bus（核心）：REST + SSE HTTP 服务、文件存储、鉴权
+│   ├── server.go         #   Run/路由/中间件/静态文件
+│   ├── handlers.go       #   list/push/action/stream/download/login
+│   ├── store.go          #   文件存储与文件名解析、滚动清理
+│   ├── config.go         #   Config 加载/生成
+│   ├── broadcaster.go    #   SSE 广播
+│   └── auth.go           #   Token 中间件 + 登录指数退避
+├── pipeline/             # Pipeline（核心）：SSE 消费 → @cc 路由 → AI → 回复
+│   └── pipeline.go
+├── ai/                   # AI Backend 接口 + Template + DeepSeek
+├── knowledge/            # 文件级知识库（关键词检索）
+├── static/
+│   └── index.html        # 单页面现代 Web 前端（磨砂玻璃 + 设备检测 + 登出）
+├── files/                # 物理存储历史文件和图片（运行自动创建，git 已忽略）
+├── config.json           # Token/登录暗号/密保密码（运行自动生成，git 已忽略）
+├── .gitignore
+└── README.md             # 本说明文档
 ```
 
 ---
@@ -52,7 +62,7 @@ ssh-connect/
 在 Go 安装就绪的环境下，直接执行：
 ```bash
 # 启动本地开发服务
-go run main.go
+go run .
 ```
 首次运行会在项目目录下自动生成 `config.json`，并打印系统自动产生的 32 位安全 Token。默认配置为：
 *   `token`：随机产生 32 位密钥
@@ -73,14 +83,14 @@ go run main.go
 ```powershell
 $env:GOOS="linux"
 $env:GOARCH="amd64"
-go build -o clipstream
+go build -o ics
 ```
 
 ### 5.2 部署目录配置
-通过 SCP/SFTP 将编译好的 `clipstream` 二进制文件与 `static/` 文件夹上传到 VPS 的 `/home/admin/clipstream/` 目录下。
+通过 SCP/SFTP 将编译好的 `ics` 二进制文件与 `static/` 文件夹上传到 VPS 的 `/home/admin/ics/` 目录下。
 
 ### 5.3 配置systemd守护进程
-创建 `/etc/systemd/system/clipstream.service`：
+创建 `/etc/systemd/system/ics.service`：
 ```ini
 [Unit]
 Description=Intranet Chat Stream (ICS) Core Service
@@ -89,8 +99,8 @@ After=network.target
 [Service]
 Type=simple
 User=admin
-WorkingDirectory=/home/admin/clipstream
-ExecStart=/home/admin/clipstream/clipstream
+WorkingDirectory=/home/admin/ics
+ExecStart=/home/admin/ics/ics
 Restart=always
 RestartSec=5
 
@@ -100,7 +110,7 @@ WantedBy=multi-user.target
 启动并启用自启：
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable clipstream --now
+sudo systemctl enable ics --now
 ```
 
 ---

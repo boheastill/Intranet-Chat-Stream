@@ -1,4 +1,7 @@
-package main
+// Package pipeline is the SSE consumer, AI router, and knowledge base.
+// It runs as a goroutine alongside the Message Bus: it listens for new
+// messages, routes @cc triggers to an AI backend, and pushes the reply back.
+package pipeline
 
 import (
 	"bufio"
@@ -12,60 +15,59 @@ import (
 	"strings"
 	"time"
 
-	"clipstream/ai"
-	"clipstream/knowledge"
+	"ics/ai"
+	"ics/knowledge"
 )
 
-// Pipeline — SSE consumer, AI router, knowledge base.
-// Runs as a goroutine alongside the Message Bus HTTP server.
-
 const (
-	icsBase     = "https://flow.bohea.us"
-	ppsStream   = icsBase + "/api/stream"
-	ppsList     = icsBase + "/api/list"
-	ppsPush     = icsBase + "/api/push"
-	ppsDownload = icsBase + "/api/download/"
-	ppsTrigger  = "@cc"
-	ppsSeenFile = "pipeline_seen.json"
-	ppsKBPath   = "pipeline_knowledge.json"
+	busBaseURL     = "https://flow.bohea.us"
+	busStreamURL   = busBaseURL + "/api/stream"
+	busPushURL     = busBaseURL + "/api/push"
+	busDownloadURL = busBaseURL + "/api/download/"
+	triggerToken   = "@cc"
+	seenStatePath  = "pipeline.seen.json"
+	knowledgePath  = "pipeline.knowledge.json"
 )
 
 var (
-	ppBackends map[string]ai.Backend
-	ppKB       *knowledge.Store
-	ppSeen     = make(map[string]bool)
+	authToken string
+	backends  map[string]ai.Backend
+	kb        *knowledge.Store
+	seen      = make(map[string]bool)
 )
 
-func startPipeline() {
+// Start runs the pipeline loop forever, authenticating to the bus with token.
+func Start(token string) {
+	authToken = token
+
 	var err error
-	ppKB, err = knowledge.New(ppsKBPath)
+	kb, err = knowledge.New(knowledgePath)
 	if err != nil {
 		log.Printf("[pipeline] knowledge init: %v", err)
 	}
 
-	ppBackends = map[string]ai.Backend{
+	backends = map[string]ai.Backend{
 		"template": ai.NewTemplate(),
 		"deepseek": ai.NewDeepSeek(),
 	}
 
-	ppLoadSeen()
+	loadSeen()
 
 	log.Printf("[pipeline] Backends: template, deepseek")
-	log.Printf("[pipeline] SSE: %s  Trigger: %s", ppsStream, ppsTrigger)
+	log.Printf("[pipeline] SSE: %s  Trigger: %s", busStreamURL, triggerToken)
 
 	for {
-		err := ppListenSSE()
-		if err != nil {
+		if err := listenSSE(); err != nil {
 			log.Printf("[pipeline] SSE: %v — reconnecting in 5s", err)
 			time.Sleep(5 * time.Second)
 		}
 	}
 }
 
-func ppListenSSE() error {
-	req, _ := http.NewRequest("GET", ppsStream, nil)
+func listenSSE() error {
+	req, _ := http.NewRequest("GET", busStreamURL, nil)
 	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("X-Auth-Token", globalConfig.Token)
+	req.Header.Set("X-Auth-Token", authToken)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -94,18 +96,18 @@ func ppListenSSE() error {
 		if evt.Event != "new_msg" || evt.ID == "" {
 			continue
 		}
-		if strings.Contains(evt.ID, "_ai_") || ppAlreadySeen(evt.ID) {
+		if strings.Contains(evt.ID, "_ai_") || alreadySeen(evt.ID) {
 			continue
 		}
-		ppMarkSeen(evt.ID)
-		ppHandle(evt.ID, evt.Channel)
+		markSeen(evt.ID)
+		handleMessage(evt.ID, evt.Channel)
 	}
 	return scanner.Err()
 }
 
-func ppHandle(id, channel string) {
-	content := ppDownload(id)
-	if content == "" || !strings.Contains(content, ppsTrigger) {
+func handleMessage(id, channel string) {
+	content := downloadMessage(id)
+	if content == "" || !strings.Contains(content, triggerToken) {
 		return
 	}
 	device := extractDevice(id)
@@ -116,48 +118,48 @@ func ppHandle(id, channel string) {
 		Content: content,
 		Device:  device,
 		Channel: channel,
-		Trigger: ppsTrigger,
+		Trigger: triggerToken,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	relevant := ppKB.Search(msg.Content, 5)
+	relevant := kb.Search(msg.Content, 5)
 
 	// Try template
-	resp, err := ppBackends["template"].Process(ctx, msg, relevant)
+	resp, err := backends["template"].Process(ctx, msg, relevant)
 	if err == nil && resp != nil && resp.Text != "" {
 		log.Printf("[pipeline] template: %s", truncate(resp.Text, 60))
-		ppPush(resp.Text, "ai")
-		ppKB.RecordConversation("last_reply", truncate(resp.Text, 200))
+		pushReply(resp.Text, "ai")
+		kb.RecordConversation("last_reply", truncate(resp.Text, 200))
 		return
 	}
 
 	// Delegate
 	if resp != nil && strings.HasPrefix(resp.Action, "delegate:") {
 		target := strings.TrimPrefix(resp.Action, "delegate:")
-		if backend, ok := ppBackends[target]; ok {
+		if backend, ok := backends[target]; ok {
 			log.Printf("[pipeline] → %s", target)
 			aiResp, err := backend.Process(ctx, msg, relevant)
 			if err != nil {
 				log.Printf("[pipeline] %s: %v", target, err)
-				ppPush("AI unavailable, try later.", "ai")
+				pushReply("AI unavailable, try later.", "ai")
 				return
 			}
 			if aiResp.Text != "" {
 				log.Printf("[pipeline] %s: %s", target, truncate(aiResp.Text, 60))
-				ppPush(aiResp.Text, "ai")
-				ppKB.RecordConversation("last_reply", truncate(aiResp.Text, 200))
+				pushReply(aiResp.Text, "ai")
+				kb.RecordConversation("last_reply", truncate(aiResp.Text, 200))
 				return
 			}
 		}
 	}
 
-	ppPush("Message received. #"+msg.ID, "ai")
+	pushReply("Message received. #"+msg.ID, "ai")
 }
 
-func ppDownload(id string) string {
-	resp, err := http.Get(ppsDownload + id + "?token=" + globalConfig.Token)
+func downloadMessage(id string) string {
+	resp, err := http.Get(busDownloadURL + id + "?token=" + authToken)
 	if err != nil {
 		return ""
 	}
@@ -167,22 +169,22 @@ func ppDownload(id string) string {
 	return string(body[:n])
 }
 
-func ppPush(text, device string) {
+func pushReply(text, device string) {
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)
-	w.WriteField("text", text)
-	w.WriteField("device", device)
-	w.Close()
+	_ = w.WriteField("text", text)
+	_ = w.WriteField("device", device)
+	_ = w.Close()
 
-	req, _ := http.NewRequest("POST", ppsPush, &buf)
-	req.Header.Set("X-Auth-Token", globalConfig.Token)
+	req, _ := http.NewRequest("POST", busPushURL, &buf)
+	req.Header.Set("X-Auth-Token", authToken)
 	req.Header.Set("Content-Type", w.FormDataContentType())
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Printf("[pipeline] push: %v", err)
 		return
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 }
 
 func extractDevice(id string) string {
@@ -196,26 +198,26 @@ func extractDevice(id string) string {
 	return "unknown"
 }
 
-func ppAlreadySeen(id string) bool {
-	if ppSeen[id] {
+func alreadySeen(id string) bool {
+	if seen[id] {
 		return true
 	}
-	if len(ppSeen) > 1000 {
-		ppSeen = make(map[string]bool)
+	if len(seen) > 1000 {
+		seen = make(map[string]bool)
 	}
 	return false
 }
 
-func ppMarkSeen(id string) {
-	ppSeen[id] = true
+func markSeen(id string) {
+	seen[id] = true
 }
 
-func ppLoadSeen() {
-	data, err := os.ReadFile(ppsSeenFile)
+func loadSeen() {
+	data, err := os.ReadFile(seenStatePath)
 	if err != nil {
 		return
 	}
-	json.Unmarshal(data, &ppSeen)
+	_ = json.Unmarshal(data, &seen)
 }
 
 func truncate(s string, maxLen int) string {

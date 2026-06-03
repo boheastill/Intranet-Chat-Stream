@@ -78,5 +78,9 @@ func serveStatic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// index.html is the app shell — always revalidate so deploys take effect immediately
+	if filepath.Base(safePath) == "index.html" {
+		w.Header().Set("Cache-Control", "no-cache")
+	}
 	http.ServeFile(w, r, safePath)
 }

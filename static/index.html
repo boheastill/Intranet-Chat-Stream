@@ -1114,7 +1114,7 @@
                             </svg>
                         </div>
                         <div class="file-info">
-                            <a href="${downloadUrl}" class="file-name" target="_blank">${msg.filename}</a>
+                            <a href="${downloadUrl}&download=1" class="file-name" target="_blank">${msg.filename}</a>
                             <span class="file-size">${msg.size}</span>
                         </div>
                     `;
@@ -1162,6 +1162,24 @@
                     };
                     actions.appendChild(copyBtn);
 
+                    // Download full text (only for truncated content)
+                    if (msg.content.includes('[内容过长已截断，请下载完整文件]')) {
+                        const dlBtn = document.createElement('button');
+                        dlBtn.className = 'btn-action';
+                        dlBtn.innerHTML = `
+                            <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                            </svg>
+                            <span>下载全文</span>
+                        `;
+                        dlBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            const dlUrl = `/api/download/${encodeURIComponent(msg.id)}?token=${encodeURIComponent(token)}&download=1`;
+                            window.open(dlUrl, '_blank');
+                        };
+                        actions.appendChild(dlBtn);
+                    }
+
                     // Pin / Unpin Action (Only for text)
                     const pinBtn = document.createElement('button');
                     pinBtn.className = 'btn-action pin-btn';
@@ -1181,24 +1199,24 @@
                         triggerAction(msg.id, msg.pinned ? 'unpin' : 'pin');
                     };
                     actions.appendChild(pinBtn);
+                }
 
-                    // Check if truncated to append a full-text download option
-                    if (msg.content.includes('[内容过长已截断，请下载完整文件]')) {
-                        const downloadBtn = document.createElement('button');
-                        downloadBtn.className = 'btn-action';
-                        downloadBtn.innerHTML = `
-                            <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                            </svg>
-                            <span>下载全文</span>
-                        `;
-                        downloadBtn.onclick = (e) => {
-                            e.stopPropagation();
-                            const downloadUrl = `/api/download/${encodeURIComponent(msg.id)}?token=${encodeURIComponent(token)}`;
-                            window.open(downloadUrl, '_blank');
-                        };
-                        actions.appendChild(downloadBtn);
-                    }
+                // Download Action (For file messages)
+                if (msg.type === 'file') {
+                    const dlBtn = document.createElement('button');
+                    dlBtn.className = 'btn-action';
+                    dlBtn.innerHTML = `
+                        <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                        </svg>
+                        <span>下载</span>
+                    `;
+                    dlBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        const dlUrl = `/api/download/${encodeURIComponent(msg.id)}?token=${encodeURIComponent(token)}&download=1`;
+                        window.open(dlUrl, '_blank');
+                    };
+                    actions.appendChild(dlBtn);
                 }
 
                 // Delete Action (For both text and file)

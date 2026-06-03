@@ -339,8 +339,12 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Set content disposition to inline so it displays in browser if possible
-	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", origFilename))
+	// ?download=1 forces attachment (trigger browser save dialog); otherwise inline
+	disposition := "inline"
+	if r.URL.Query().Get("download") == "1" {
+		disposition = "attachment"
+	}
+	w.Header().Set("Content-Disposition", fmt.Sprintf("%s; filename=%q", disposition, origFilename))
 	// Enable cache control for immutable files (our filenames contain epoch timestamp, so they are immutable)
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 

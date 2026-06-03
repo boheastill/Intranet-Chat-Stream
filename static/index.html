@@ -1114,7 +1114,7 @@
                             </svg>
                         </div>
                         <div class="file-info">
-                            <a href="${downloadUrl}&download=1" class="file-name" target="_blank">${msg.filename}</a>
+                            <a href="${downloadUrl}&download=1" class="file-name" download="${msg.filename}">${msg.filename}</a>
                             <span class="file-size">${msg.size}</span>
                         </div>
                     `;
@@ -1175,7 +1175,12 @@
                         dlBtn.onclick = (e) => {
                             e.stopPropagation();
                             const dlUrl = `/api/download/${encodeURIComponent(msg.id)}?token=${encodeURIComponent(token)}&download=1`;
-                            window.open(dlUrl, '_blank');
+                            const a = document.createElement('a');
+                            a.href = dlUrl;
+                            a.download = 'text.txt';
+                            document.body.appendChild(a);
+                            a.click();
+                            a.remove();
                         };
                         actions.appendChild(dlBtn);
                     }
@@ -1214,7 +1219,12 @@
                     dlBtn.onclick = (e) => {
                         e.stopPropagation();
                         const dlUrl = `/api/download/${encodeURIComponent(msg.id)}?token=${encodeURIComponent(token)}&download=1`;
-                        window.open(dlUrl, '_blank');
+                        const a = document.createElement('a');
+                        a.href = dlUrl;
+                        a.download = msg.filename || '';
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
                     };
                     actions.appendChild(dlBtn);
                 }

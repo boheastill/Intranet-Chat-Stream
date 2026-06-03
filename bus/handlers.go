@@ -343,6 +343,8 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 	disposition := "inline"
 	if r.URL.Query().Get("download") == "1" {
 		disposition = "attachment"
+		// Force binary Content-Type so mobile browsers don't append .txt
+		w.Header().Set("Content-Type", "application/octet-stream")
 	}
 	w.Header().Set("Content-Disposition", fmt.Sprintf("%s; filename=%q", disposition, origFilename))
 	// Enable cache control for immutable files (our filenames contain epoch timestamp, so they are immutable)

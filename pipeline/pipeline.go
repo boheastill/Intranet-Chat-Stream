@@ -132,7 +132,7 @@ func handleMessage(id, channel string) {
 	resp, err := backends["template"].Process(ctx, msg, relevant)
 	if err == nil && resp != nil && resp.Text != "" {
 		log.Printf("[pipeline] template: %s", truncate(resp.Text, 60))
-		pushReply(resp.Text, "ai")
+		pushReply(resp.Text, "ai", channel)
 		return
 	}
 
@@ -144,18 +144,18 @@ func handleMessage(id, channel string) {
 			aiResp, err := backend.Process(ctx, msg, relevant)
 			if err != nil {
 				log.Printf("[pipeline] %s: %v", target, err)
-				pushReply("AI unavailable, try later.", "ai")
+				pushReply("AI unavailable, try later.", "ai", channel)
 				return
 			}
 			if aiResp.Text != "" {
 				log.Printf("[pipeline] %s: %s", target, truncate(aiResp.Text, 60))
-				pushReply(aiResp.Text, "ai")
+				pushReply(aiResp.Text, "ai", channel)
 				return
 			}
 		}
 	}
 
-	pushReply("Message received. #"+msg.ID, "ai")
+	pushReply("Message received. #"+msg.ID, "ai", channel)
 }
 
 func downloadMessage(id string) string {
@@ -169,14 +169,19 @@ func downloadMessage(id string) string {
 	return string(body[:n])
 }
 
-func pushReply(text, device string) {
+func pushReply(text, device, channel string) {
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)
 	_ = w.WriteField("text", text)
 	_ = w.WriteField("device", device)
 	_ = w.Close()
 
-	req, _ := http.NewRequest("POST", busPushURL, &buf)
+	url := busPushURL
+	if channel != "" {
+		url = busPushURL + "?channel=" + channel
+	}
+
+	req, _ := http.NewRequest("POST", url, &buf)
 	req.Header.Set("X-Auth-Token", authToken)
 	req.Header.Set("Content-Type", w.FormDataContentType())
 	resp, err := http.DefaultClient.Do(req)

@@ -119,4 +119,4 @@ Successful writes, actions, and cleanup events are logged to stdout (systemd jou
 
 ## License
 
-[MIT](LICENSE) © Bohea Still — [boheastill.com](https://boheastill.com)
+[MIT](LICENSE) © [Bohea Still](https://boheastill.com/?utm_source=github&utm_campaign=ics) — independent developer taking on automation, AI-pipeline and integration projects.

@@ -44,6 +44,14 @@ Think of it as a private, persistent clipboard-meets-message-bus: every device (
 - `knowledge/` — file-based knowledge base with keyword retrieval
 - `static/index.html` — single-page frosted-glass web client
 
+## 🤖 Agent-native: let your AI set it up
+
+ICS ships with [`AGENTS.md`](AGENTS.md) — deployment and integration instructions written *for AI agents*. If you use Claude Code, Cursor, or any capable agent, you don't have to read the docs at all. Paste this to your agent:
+
+> Read https://github.com/boheastill/Intranet-Chat-Stream/blob/main/AGENTS.md and deploy ICS on this machine. Then join the stream yourself so we can chat there, and give me my login URL.
+
+Your agent installs it, hardens the defaults, connects itself as a consumer (or via the bundled [MCP server](mcp/server.py)), and hands you a logged-in web UI — a private, local channel where you and your AI talk and exchange files.
+
 ## Quick start
 
 **Option A — prebuilt binary**: download the archive for your platform from [Releases](https://github.com/boheastill/Intranet-Chat-Stream/releases/latest), extract, and run `./ics` (the archive ships with the `static/` web UI).

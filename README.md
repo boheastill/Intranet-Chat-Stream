@@ -1,98 +1,99 @@
-# Intranet Chat Stream (ICS) - Core
+# Intranet Chat Stream (ICS)
 
-ICS-Core 是一个超轻量级、零数据库（DB-Less）、面向“人机协同（HITL）”与“跨设备数据流”设计的极简剪贴板及文件中转站。
+**A self-hosted, DB-less chat stream for moving text and files between your PC, phone, and AI agents. One Go binary, zero dependencies.**
 
-本仓库实现了 **ICS-Core（数据面 / 哑管道）** 的 Go 语言核心后端，以及对应的磨砂玻璃现代 Web 前端。
+[中文文档](README.zh-CN.md)
 
----
+Think of it as a private, persistent clipboard-meets-message-bus: every device (and every AI agent) reads and writes the same stream through a dead-simple REST API, with a clean web UI on top. Built for human-in-the-loop workflows where you, your machines, and your AI assistants share one channel.
 
-## 1. 核心架构哲学 (Dumb Pipe & Smart Consumers)
+## Why ICS
 
-*   **ICS-Core (哑管道 / Go)**：定位为无状态、高并发、高稳定的数据流通道，只负责文本/文件存盘、检索、磁盘容量统计及空间滚动清理。
-    *   **大文本截断防御**：获取列表时，文本文件若超过 10KB 自动截断并追加提示，保障长文本频繁轮询时的无感 I/O 和极致首屏加载性能。
-    *   **极简审计日志**：对成功的写入、操作和系统级淘汰，通过标准输出流（Stdout / systemd journal）打印无噪音审计日志。
-*   **Web 客户端 (HTML5/JS)**：提供极致阅读器体验的单页应用。
-    *   **亮色纸质护眼主题**：全天候护眼配色，自适应设备高度（防软键盘遮挡），实现 100dvh 无缝体验。
-    *   **多文件无缝秒传**：深度整合系统文件管理器，支持多文件并发选择并自动上传，告别多余的“确认”点击。
-*   **AI Pipeline (智能管道 / Go，内置)**：与 Message Bus 同进程运行的被动消费者。它监听消息流，命中触发词（`@ds`/`@mi`/`@ag`/`@cc`）时路由到对应 AI 后端（DeepSeek / 小米 MiMo），把回复以 `device=ai` 推回流。详见 [§8 AI Pipeline 与触发词路由](#8-ai-pipeline-与触发词路由)。
-*   **Consumers (智能消费者 / Python/JS)**：您的本地 AI 自动化 Agent（如任务抓取、通知推送脚本）。通过标准的 API Header Token 进行鉴权消费，与核心服务彻底解耦。
+- **Zero database, zero setup** — messages and files live on the filesystem. Run the binary and you're done. Rolling cleanup keeps disk usage under a configurable quota (default 2 GB).
+- **One stream, every device** — paste a verification code on your PC, read it on your phone. Drop files from mobile, pull them from a script. Real-time sync via SSE.
+- **AI agents are first-class citizens** — a built-in pipeline watches the stream; messages hitting a trigger word (`@ds`, `@mi`, `@ag`, `@cc`) are routed to a configurable AI backend (DeepSeek / Xiaomi MiMo), and replies flow back into the stream tagged `device=ai`. External agents integrate with ~10 lines of Python.
+- **Dumb pipe, smart consumers** — the core stays a stateless, high-concurrency data channel. Intelligence lives at the edges, fully decoupled behind token auth.
+- **Designed for tunnel-only exposure** — binds to `127.0.0.1` only; pair it with Cloudflare Tunnel (or any reverse proxy) so no inbound port is ever open to the internet.
 
----
+## Architecture
 
-## 2. 目录布局 (Directory Layout)
-
-```text
-ics-core/                 # Go module `ics`
-├── main.go               # 启动装配：加载配置 → 启动 pipeline → 运行 bus
-├── bus/                  # Message Bus（核心）：REST + SSE HTTP 服务、文件存储、鉴权
-│   ├── server.go         #   Run/路由/中间件/静态文件
-│   ├── handlers.go       #   list/push/action/stream/download/login
-│   ├── store.go          #   文件存储与文件名解析、滚动清理
-│   ├── config.go         #   Config 加载/生成
-│   ├── broadcaster.go    #   SSE 广播
-│   └── auth.go           #   Token 中间件 + 登录指数退避
-├── pipeline/             # Pipeline（核心）：SSE 消费 → 触发词路由 → AI → 回复
-│   └── pipeline.go
-├── ai/                   # AI Backend 接口 + Template + DeepSeek + MiMo + router(触发词路由表)
-├── knowledge/            # 文件级知识库（关键词检索）
-├── static/
-│   └── index.html        # 单页面现代 Web 前端（磨砂玻璃 + 设备检测 + 登出）
-├── files/                # 物理存储历史文件和图片（运行自动创建，git 已忽略）
-├── config.json           # Token/登录暗号/密保密码（运行自动生成，git 已忽略）
-├── .gitignore
-└── README.md             # 本说明文档
+```
+┌─────────┐  ┌─────────┐  ┌────────────┐
+│ Web UI  │  │ Phone   │  │ AI Agents  │   smart consumers
+└────┬────┘  └────┬────┘  └─────┬──────┘
+     │  REST + SSE, X-Auth-Token │
+┌────┴─────────────┴─────────────┴──────┐
+│         ICS-Core (Go, single binary)  │   dumb pipe
+│  message bus · file store · auth      │
+│  + built-in AI pipeline (trigger      │
+│    words → DeepSeek / MiMo → stream)  │
+└───────────────────────────────────────┘
 ```
 
----
+- `bus/` — REST + SSE HTTP service, file storage, auth middleware, rolling cleanup
+- `pipeline/` — SSE consumer → trigger-word routing → AI backend → reply push
+- `ai/` — backend interface + DeepSeek / MiMo implementations + router table
+- `knowledge/` — file-based knowledge base with keyword retrieval
+- `static/index.html` — single-page frosted-glass web client
 
-## 3. 安全防护与登录体系 (Security & Auth Model)
+## Quick start
 
-*   **零入站公网防火墙 (Cloudflare Tunnel)**：VPS 本地服务仅监听 `127.0.0.1:6666`。外部攻击者及全网扫描器无法从公网直接探测该端口。所有请求均由 VPS 主动出站连接 Cloudflare 隧道进行加密中转。
-*   **双模式身份鉴权**：
-    *   **Token 直接鉴权**：API 请求均需在 HTTP 头部携带 `X-Auth-Token`。图片及二进制文件下载链接支持从 URL 参数中校验 `?token=`。
-    *   **Stealth Key 隐形应急门禁**：在新设备/临时环境下，默认访问只显示 Token 鉴权框（完全隐藏密码登录选项）。只有在访问 URL 带有匹配的暗号参数时（如 `?key=vip`），前端才会解锁呈现「使用密保密码登录」的选项。输入 8 位简单密保密码（默认 `66666666`）验证通过后，后端安全分发 Token。
-*   **IP 级别指数退避防爆破（Exponential Backoff）**：密码登录接口对每个尝试的 IP 地址进行单独计数。一旦验证失败，该 IP 地址的重试等待惩罚按 $2^{(n-1)}$ 秒呈指数增长（最高延迟 60 秒），彻底瓦解高频暴力攻击。
-    *   **CF IP 真实捕获**：后端自动读取 `CF-Connecting-IP` 报头，确保与 Cloudflare 隧道中转时，防爆破锁死能够准确隔离黑客 IP，绝不影响属主用户的 IP 正常访问。
-*   **路径防穿透清洗**：所有文件读写动作均执行严格的 `filepath` 安全防线校验，杜绝 `../` 等黑客恶意文件读取注入。
-
----
-
-## 4. 本地构建与运行 (Local Setup)
-
-### 4.1 编译与启动
-在 Go 安装就绪的环境下，直接执行：
 ```bash
-# 启动本地开发服务
-go run .
-```
-首次运行会在项目目录下自动生成 `config.json`，并打印系统自动产生的 32 位安全 Token。默认配置为：
-*   `token`：随机产生 32 位密钥
-*   `password`：`66666666`（密保密码）
-*   `login_key`：`vip`（隐藏 URL 暗号）
-
-### 4.2 访问系统
-*   浏览器打开 `http://127.0.0.1:6666`。
-*   根据提示输入终端打印的 Token，即可开始使用。
-*   应急状态下访问 `http://127.0.0.1:6666/?key=vip`，切换并输入密保密码 `66666666` 登录。
-
----
-
-## 5. 生产环境编译与 VPS 部署 (Debian/Ubuntu)
-
-### 5.1 交叉编译 (Linux amd64)
-在 Windows 开发环境下，执行以下命令编译为 Linux 下的 ELF 二进制可执行文件：
-```powershell
-$env:GOOS="linux"
-$env:GOARCH="amd64"
-go build -o ics
+go run .        # or: go build -o ics && ./ics
 ```
 
-### 5.2 部署目录配置
-通过 SCP/SFTP 将编译好的 `ics` 二进制文件与 `static/` 文件夹上传到 VPS 的 `/home/admin/ics/` 目录下。
+First run generates `config.json` with a random 32-char token and prints it. Open `http://127.0.0.1:6666`, paste the token, done.
 
-### 5.3 配置systemd守护进程
-创建 `/etc/systemd/system/ics.service`：
+Change the defaults in `config.json` before exposing the service anywhere:
+
+- `token` — auto-generated API key (header `X-Auth-Token`)
+- `password` — 8-digit fallback password (default `66666666` — **change it**)
+- `login_key` — URL knock parameter that reveals the password login (default `vip` — **change it**)
+
+## Security model
+
+- **Token-first auth** — every API call requires `X-Auth-Token`; downloads accept `?token=`.
+- **Stealth fallback login** — the password form is invisible unless the URL carries your secret knock (`?key=<login_key>`). New-device onboarding without advertising a login endpoint.
+- **Per-IP exponential backoff** — failed password attempts back off at 2^(n−1) seconds (capped at 60 s), keyed by real client IP (`CF-Connecting-IP` aware behind Cloudflare).
+- **Path-traversal hardening** — all file operations pass strict `filepath` sanitization.
+- **No inbound ports** — listens on loopback only; expose via Cloudflare Tunnel outbound connection.
+
+## API
+
+All endpoints require `X-Auth-Token` (except `/api/login`).
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/list` | GET | Fetch the stream (newest first). Quota usage returned in `X-Quota-Used` / `X-Quota-Limit` headers. Text > 10 KB is truncated in list view for fast polling. |
+| `/api/push` | POST | Multipart form: `text` and/or `file`, optional `device` tag (`pc` / `mobile` / `ai` / `web`). |
+| `/api/action` | POST | JSON `{"id": "...", "action": "pin" \| "unpin" \| "delete"}`. |
+| `/api/login` | POST | JSON `{"password": "...", "key": "..."}` → returns the token. Rate-limited per IP. |
+| `/api/stream` | GET | SSE feed of new messages. |
+
+### Minimal Python agent
+
+```python
+import requests
+
+TOKEN = "<token from config.json>"
+BASE_URL = "https://ics.example.com"  # your tunnel/proxy URL
+headers = {"X-Auth-Token": TOKEN}
+
+messages = requests.get(f"{BASE_URL}/api/list", headers=headers).json()
+
+requests.post(f"{BASE_URL}/api/push", headers=headers,
+              data={"text": "🤖 done: extracted code [9981]", "device": "ai"})
+```
+
+## Production deployment (Debian/Ubuntu + systemd)
+
+```bash
+GOOS=linux GOARCH=amd64 go build -o ics
+```
+
+Upload `ics` + `static/` to your server, then:
+
 ```ini
+# /etc/systemd/system/ics.service
 [Unit]
 Description=Intranet Chat Stream (ICS) Core Service
 After=network.target
@@ -108,114 +109,14 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 ```
-启动并启用自启：
+
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable ics --now
 ```
 
----
+Successful writes, actions, and cleanup events are logged to stdout (systemd journal) as a minimal audit trail.
 
-## 6. API 协议规范 (API Contract)
+## License
 
-### 6.1 `GET /api/list` (拉取消息流)
-*   **请求 Header**：`X-Auth-Token: [您的密钥]`
-*   **响应 Header**（附带容量指标）：
-    *   `X-Quota-Used`：当前 `./files` 已占用字节数 (bytes)
-    *   `X-Quota-Limit`：总磁盘空间配额字节数 (默认 2147483648 bytes, 即 2GB)
-*   **响应示例** (按时间戳倒序)：
-    ```json
-    [
-      {
-        "id": "1780167900_pc_text.txt",
-        "type": "text",
-        "content": "验证码: 9981",
-        "time": "2026-05-31 03:05:00",
-        "pinned": false,
-        "device": "pc"
-      },
-      {
-        "id": "1780168200_mobile_screenshot.png",
-        "type": "file",
-        "filename": "screenshot.png",
-        "size": "150 KB",
-        "time": "2026-05-31 03:10:00",
-        "pinned": true,
-        "device": "mobile"
-      }
-    ]
-    ```
-
-### 6.2 `POST /api/push` (投送文本/文件)
-*   **请求 Header**：`X-Auth-Token: [您的密钥]`
-*   **请求体** (Multipart Form)：
-    *   `text` (可选，String)：文本框输入
-    *   `file` (可选，File)：上传的文件
-    *   `device` (可选，String)：设备标识，支持 `pc`, `mobile`, `ai`, `web`。缺省默认为 `pc`。
-*   **响应示例**：
-    ```json
-    {"id":"1780167900_ai_text.txt","status":"success"}
-    ```
-
-### 6.3 `POST /api/login` (密保密码登录)
-*   **请求体** (JSON)：
-    ```json
-    {
-      "password": "密保密码",
-      "key": "URL参数中的验证暗号Key"
-    }
-    ```
-*   **响应示例 (成功)**：
-    ```json
-    {
-      "status": "success",
-      "token": "<your-token-from-config.json>"
-    }
-    ```
-*   **响应示例 (等待限速锁定中 - Status 429)**：
-    ```json
-    {
-      "status": "error",
-      "error": "尝试次数过多，请等待 12 秒后重试"
-    }
-    ```
-
-### 6.4 `POST /api/action` (置顶/取消置顶/删除卡片)
-*   **请求 Header**：`X-Auth-Token: [您的密钥]`
-*   **请求体** (JSON)：
-    ```json
-    {"id": "1780167900_pc_text.txt", "action": "pin"} 
-    // 支持 action: "pin" (置顶保护), "unpin" (取消置顶), "delete" (物理删除)
-    ```
-
----
-
-## 7. Python AI Agent (ICS-Agent) 对接模板
-
-```python
-import requests
-
-TOKEN = "<your-token>"  # 替换为 config.json 里的真实 Token
-BASE_URL = "https://flow.bohea.us"
-
-headers = {
-    "X-Auth-Token": TOKEN
-}
-
-# 1. 拉取当前待处理流并检测容量
-res = requests.get(f"{BASE_URL}/api/list", headers=headers)
-quota_used = res.headers.get("X-Quota-Used")
-quota_limit = res.headers.get("X-Quota-Limit")
-print(f"已用容量: {int(quota_used)/1024/1024:.2f} MB / 限额 {int(quota_limit)/1024/1024/1024:.1f} GB")
-
-messages = res.json()
-print("当前流中消息数量:", len(messages))
-
-# 2. 推送处理完毕的消息，指定设备标签为 'ai'
-payload = {
-    "text": "🤖 AI Agent 分析完毕：待提取验证码为 [9981]",
-    "device": "ai"
-}
-res_push = requests.post(f"{BASE_URL}/api/push", headers=headers, data=payload)
-print("推送结果:", res_push.json())
-```
+[MIT](LICENSE) © Bohea Still — [boheastill.com](https://boheastill.com)

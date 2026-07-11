@@ -9,6 +9,12 @@
 
 Think of it as a private, persistent clipboard-meets-message-bus: every device (and every AI agent) reads and writes the same stream through a dead-simple REST API, with a clean web UI on top. Built for human-in-the-loop workflows where you, your machines, and your AI assistants share one channel.
 
+| Desktop | Mobile |
+|---|---|
+| ![Web UI on desktop](docs/screenshot-desktop.png) | ![Web UI on mobile](docs/screenshot-mobile.png) |
+
+*One stream shared by phone 📱, PC 💻 and AI agents 🤖 — the web UI is currently Chinese-first; full API and docs are in English.*
+
 ## Why ICS
 
 - **Zero database, zero setup** — messages and files live on the filesystem. Run the binary and you're done. Rolling cleanup keeps disk usage under a configurable quota (default 2 GB).

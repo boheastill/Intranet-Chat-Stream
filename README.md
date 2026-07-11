@@ -1,5 +1,8 @@
 # Intranet Chat Stream (ICS)
 
+[![Release](https://img.shields.io/github/v/release/boheastill/Intranet-Chat-Stream)](https://github.com/boheastill/Intranet-Chat-Stream/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 **A self-hosted, DB-less chat stream for moving text and files between your PC, phone, and AI agents. One Go binary, zero dependencies.**
 
 [中文文档](README.zh-CN.md)
@@ -36,6 +39,10 @@ Think of it as a private, persistent clipboard-meets-message-bus: every device (
 - `static/index.html` — single-page frosted-glass web client
 
 ## Quick start
+
+**Option A — prebuilt binary**: download the archive for your platform from [Releases](https://github.com/boheastill/Intranet-Chat-Stream/releases/latest), extract, and run `./ics` (the archive ships with the `static/` web UI).
+
+**Option B — from source** (Go 1.22+):
 
 ```bash
 go run .        # or: go build -o ics && ./ics

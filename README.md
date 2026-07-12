@@ -26,17 +26,38 @@ Think of it as a private, persistent clipboard-meets-message-bus: every device (
 
 ## Architecture
 
+```mermaid
+flowchart TB
+    subgraph consumers["Smart consumers"]
+        W["Web UI"]
+        P["Phone"]
+        A["AI Agents / MCP"]
+    end
+    subgraph core["ICS-Core — one Go binary, dumb pipe"]
+        B["Message Bus<br/>REST + SSE · file store · token auth"]
+        AI["Built-in AI pipeline<br/>trigger words → AI backend → stream"]
+    end
+    W <-->|REST + SSE| B
+    P <-->|REST + SSE| B
+    A <-->|REST + SSE| B
+    AI -->|consumes SSE like any client| B
+    B --- FS[("./files<br/>no database")]
 ```
-┌─────────┐  ┌─────────┐  ┌────────────┐
-│ Web UI  │  │ Phone   │  │ AI Agents  │   smart consumers
-└────┬────┘  └────┬────┘  └─────┬──────┘
-     │  REST + SSE, X-Auth-Token │
-┌────┴─────────────┴─────────────┴──────┐
-│         ICS-Core (Go, single binary)  │   dumb pipe
-│  message bus · file store · auth      │
-│  + built-in AI pipeline (trigger      │
-│    words → DeepSeek / MiMo → stream)  │
-└───────────────────────────────────────┘
+
+What happens when a message carries an AI trigger word:
+
+```mermaid
+sequenceDiagram
+    actor You
+    participant Bus as Message Bus
+    participant Pipe as AI Pipeline
+    participant AI as AI Backend
+    You->>Bus: push "@ds what ports does SSE need?"
+    Bus-->>Pipe: SSE event — pipeline is just another consumer
+    Pipe->>AI: route by trigger word, send question
+    AI-->>Pipe: answer
+    Pipe->>Bus: push reply tagged device=ai
+    Bus-->>You: SSE event — reply appears in your stream
 ```
 
 - `bus/` — REST + SSE HTTP service, file storage, auth middleware, rolling cleanup

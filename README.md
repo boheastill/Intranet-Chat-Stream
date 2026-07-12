@@ -1,5 +1,6 @@
 # Intranet Chat Stream (ICS)
 
+[![CI](https://github.com/boheastill/Intranet-Chat-Stream/actions/workflows/ci.yml/badge.svg)](https://github.com/boheastill/Intranet-Chat-Stream/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/boheastill/Intranet-Chat-Stream)](https://github.com/boheastill/Intranet-Chat-Stream/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 

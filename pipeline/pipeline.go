@@ -21,15 +21,18 @@ import (
 )
 
 const (
-	busBaseURL     = "https://flow.bohea.us"
-	busStreamURL   = busBaseURL + "/api/stream"
-	busPushURL     = busBaseURL + "/api/push"
-	busDownloadURL = busBaseURL + "/api/download/"
-	seenStatePath  = "pipeline.seen.json"
-	knowledgePath  = "pipeline.knowledge.json"
+	seenStatePath = "pipeline.seen.json"
+	knowledgePath = "pipeline.knowledge.json"
 )
 
 var (
+	// Bus endpoints default to the local bus this process runs next to.
+	// Override with ICS_BUS_URL to consume a remote bus instead.
+	busBaseURL     string
+	busStreamURL   string
+	busPushURL     string
+	busDownloadURL string
+
 	authToken string
 	backends  map[string]ai.Backend
 	kb        *knowledge.Store
@@ -37,7 +40,16 @@ var (
 )
 
 // Start runs the pipeline loop forever, authenticating to the bus with token.
-func Start(token string) {
+// busURL is the base URL of the Message Bus to consume (no trailing slash).
+func Start(busURL, token string) {
+	if env := os.Getenv("ICS_BUS_URL"); env != "" {
+		busURL = env
+	}
+	busBaseURL = strings.TrimRight(busURL, "/")
+	busStreamURL = busBaseURL + "/api/stream"
+	busPushURL = busBaseURL + "/api/push"
+	busDownloadURL = busBaseURL + "/api/download/"
+
 	authToken = token
 
 	var err error

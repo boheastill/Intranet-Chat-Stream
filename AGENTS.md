@@ -17,15 +17,11 @@ ICS is a single-binary, DB-less message stream: humans and agents read/write the
    First run creates `config.json` and prints a 32-char access token to stdout.
    Read the token from stdout or from `config.json` (`token` field).
 
-3. **⚠️ Known issue in v1.0.0 — the port is hardcoded to `6666`**, which is on the
-   Chrome/Firefox unsafe-port blocklist (`ERR_UNSAFE_PORT`): the API works fine, but browsers
-   refuse to open the web UI. Pick the best available fix, in this order:
-   - If Go ≥ 1.22 is available: build from source and change `port = ":6666"` to `":8666"` in
-     `bus/server.go` first (one line), then use `8666` everywhere below.
-   - Otherwise: keep the binary on 6666 for API/agent use, and give the user a browser
-     workaround for the UI — e.g. launch Chrome with `--explicitly-allowed-ports=6666`, or
-     front it with any local reverse proxy on a normal port.
-   - Check Releases for a version newer than v1.0.0, which fixes the default port.
+3. **Port.** v1.0.1+ defaults to `8666` and prints a logged-in URL at startup — nothing to do.
+   Only if the user is stuck on v1.0.0: that version hardcodes port `6666`, which browsers
+   block (`ERR_UNSAFE_PORT`) — upgrade to the latest release, or as a stopgap launch Chrome
+   with `--explicitly-allowed-ports=6666`. If the user needs a non-default port, set `"port"`
+   in `config.json` (avoid 6665–6669).
 
 4. **Harden the defaults.** In `config.json`, replace the default `password` (`66666666`) and
    `login_key` (`vip`) with values you generate. Tell the user what you set, privately.

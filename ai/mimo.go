@@ -91,7 +91,7 @@ func (m *MiMoBackend) Process(ctx context.Context, msg Message, knowledge []Entr
 
 func buildMiMoSystemPrompt(knowledge []Entry) string {
 	var sb strings.Builder
-	sb.WriteString("You are bohea's AI assistant running in ICS-Pipeline.\n")
+	sb.WriteString("You are the user's AI assistant running in ICS-Pipeline.\n")
 	sb.WriteString("Your brain is Xiaomi MiMo (mimo-v2.5-pro), invoked by a Go binary.\n")
 	sb.WriteString("Reply concisely, accurately, max 3 sentences.\n")
 	sb.WriteString("Current time: " + time.Now().Format("2006-01-02 15:04:05") + "\n")

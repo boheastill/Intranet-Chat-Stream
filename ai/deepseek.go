@@ -79,7 +79,7 @@ func (d *DeepSeekBackend) Process(ctx context.Context, msg Message, knowledge []
 
 func buildSystemPrompt(knowledge []Entry) string {
 	var sb strings.Builder
-	sb.WriteString("You are bohea's AI assistant running in ICS (Intranet Chat Stream), Mode C.\n")
+	sb.WriteString("You are the user's AI assistant running in ICS (Intranet Chat Stream), Mode C.\n")
 	sb.WriteString("Your brain is the DeepSeek API (deepseek-chat), invoked by a Go pipeline.\n")
 	sb.WriteString("Reply concisely and accurately, max 3 sentences.\n")
 	sb.WriteString("Current time: " + time.Now().Format("2006-01-02 15:04:05") + "\n")

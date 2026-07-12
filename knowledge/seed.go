@@ -14,7 +14,7 @@ import "ics/ai"
 var projectKnowledge = []ai.Entry{
 	{
 		Topic:   "ICS 是什么",
-		Content: "ICS（Intranet Chat Stream，内网聊天流）是一个跨设备消息总线，内置 AI 管道。任何设备通过网页或 API 发消息即可跨设备实时同步，并能用触发词唤起 AI 回复。公开地址 https://flow.bohea.us。",
+		Content: "ICS（Intranet Chat Stream，内网聊天流）是一个跨设备消息总线，内置 AI 管道。任何设备通过网页或 API 发消息即可跨设备实时同步，并能用触发词唤起 AI 回复。",
 		Tags:    []string{"是什么", "介绍", "项目", "功能", "干什么", "ics"},
 	},
 	{
@@ -39,12 +39,12 @@ var projectKnowledge = []ai.Entry{
 	},
 	{
 		Topic:   "部署与运维",
-		Content: "用仓库根的 deploy.ps1 从 Windows 交叉编译 Linux 二进制，scp 到 AWS 新加坡(47.130.65.208)，以 systemd service `ics` 运行，工作目录 /home/admin/ics。更新流程：停服→上传→启动→看日志。",
-		Tags:    []string{"部署", "deploy", "服务器", "运维", "aws", "systemd", "发版"},
+		Content: "交叉编译 Linux 二进制(GOOS=linux go build)，上传到你的服务器，以 systemd service `ics` 运行(README 有完整 unit 示例)。更新流程：停服→上传→启动→看日志。",
+		Tags:    []string{"部署", "deploy", "服务器", "运维", "systemd", "发版"},
 	},
 	{
 		Topic:   "网络与访问",
-		Content: "服务只监听 127.0.0.1:6666，不开公网入站端口；由 Cloudflare Tunnel 主动出站把 https://flow.bohea.us 的流量转发到本地。这样全网扫描器无法直接探测服务端口。",
+		Content: "服务只监听 127.0.0.1(默认端口 8666)，不开公网入站端口；如需远程访问，用 Cloudflare Tunnel 等反向代理把你的域名流量主动出站转发到本地。这样全网扫描器无法直接探测服务端口。",
 		Tags:    []string{"网络", "访问", "端口", "cloudflare", "tunnel", "域名", "公网"},
 	},
 	{
@@ -54,12 +54,12 @@ var projectKnowledge = []ai.Entry{
 	},
 	{
 		Topic:   "配置与环境变量",
-		Content: "首次运行自动生成 config.json(token/密码/暗号)。AI 密钥不硬编码，经 systemd EnvironmentFile(/home/admin/ics/ics.env) 注入 DEEPSEEK_API_KEY、MIMO_API_KEY；另有 ICS_MAX_DIR_SIZE_BYTES、MIMO_MODEL 等可覆盖。",
+		Content: "首次运行自动生成 config.json(token/密码/暗号/端口)。AI 密钥不硬编码，经环境变量(如 systemd EnvironmentFile)注入 DEEPSEEK_API_KEY、MIMO_API_KEY；另有 ICS_BUS_URL、ICS_MAX_DIR_SIZE_BYTES、MIMO_MODEL 等可覆盖。",
 		Tags:    []string{"配置", "环境变量", "env", "config", "密钥", "apikey"},
 	},
 	{
 		Topic:   "MCP 工具",
-		Content: "ics-mcp-server(Python/FastMCP) 把 ICS 的 REST API 封装成 4 个 MCP 工具：list_messages、read_message、push_message、manage_message，让外部 AI 客户端能直接读写消息流。",
+		Content: "仓库自带 MCP server(mcp/server.py，Python/FastMCP)，把 ICS 的 REST API 封装成 5 个 MCP 工具：list_messages、read_message、push_message、push_file、manage_message，让外部 AI 客户端能直接读写消息流。",
 		Tags:    []string{"mcp", "工具", "集成", "server", "python"},
 	},
 	{
@@ -69,7 +69,7 @@ var projectKnowledge = []ai.Entry{
 	},
 	{
 		Topic:   "作者与用途",
-		Content: "ICS 是 bohea 的个人项目，用于在自己的多台设备之间稳定、干净地流转消息与文件，并让 AI 跨设备协助。",
-		Tags:    []string{"作者", "谁做的", "用途", "bohea", "为什么做"},
+		Content: "ICS 是 Bohea Still 发起的开源项目(MIT，github.com/boheastill/Intranet-Chat-Stream)，用于在个人多台设备之间稳定、干净地流转消息与文件，并让 AI 跨设备协助。",
+		Tags:    []string{"作者", "谁做的", "用途", "开源", "为什么做"},
 	},
 }

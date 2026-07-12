@@ -10,11 +10,16 @@ import (
 
 const configPath = "./config.json"
 
+// defaultPort is the loopback port the bus listens on. Ports 6665-6669 are on
+// the browser unsafe-port blocklist (ERR_UNSAFE_PORT) and must be avoided.
+const defaultPort = 8666
+
 // Config represents the application configuration format.
 type Config struct {
 	Token    string `json:"token"`
 	Password string `json:"password"`
 	LoginKey string `json:"login_key"`
+	Port     int    `json:"port"`
 }
 
 // generateRandomToken creates a cryptographically secure 32-character token.
@@ -37,6 +42,7 @@ func LoadConfig() Config {
 			Token:    token,
 			Password: defaultPassword,
 			LoginKey: defaultLoginKey,
+			Port:     defaultPort,
 		}
 		data, _ := json.MarshalIndent(cfg, "", "  ")
 		_ = os.WriteFile(configPath, data, 0600)
@@ -51,6 +57,7 @@ func LoadConfig() Config {
 			Token:    "temporary_token",
 			Password: defaultPassword,
 			LoginKey: defaultLoginKey,
+			Port:     defaultPort,
 		}
 	}
 
@@ -61,18 +68,26 @@ func LoadConfig() Config {
 			Token:    "temporary_token",
 			Password: defaultPassword,
 			LoginKey: defaultLoginKey,
+			Port:     defaultPort,
 		}
 	}
 
+	needsSave := false
 	if cfg.Password == "" {
 		cfg.Password = defaultPassword
+		needsSave = true
 	}
 	if cfg.LoginKey == "" {
 		cfg.LoginKey = defaultLoginKey
+		needsSave = true
+	}
+	if cfg.Port == 0 {
+		cfg.Port = defaultPort
+		needsSave = true
 	}
 
 	// Save back to config.json if there were missing fields
-	if cfg.Password == defaultPassword || cfg.LoginKey == defaultLoginKey {
+	if needsSave {
 		data, _ = json.MarshalIndent(cfg, "", "  ")
 		_ = os.WriteFile(configPath, data, 0600)
 	}

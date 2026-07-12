@@ -64,6 +64,7 @@ Conventions for well-behaved agents:
 This repo ships an MCP server at `mcp/server.py` (Python, FastMCP; deps declared inline for `uv`).
 
 Run: `uv run mcp/server.py` with env `ICS_BASE_URL` (e.g. `http://127.0.0.1:8666`) and `ICS_TOKEN`.
+No `uv`? Fall back to `pip install mcp requests pydantic` and run `python mcp/server.py` (adjust the client config command accordingly).
 
 Client config (Claude Desktop / any MCP client):
 ```json

@@ -1,6 +1,6 @@
 # Intranet Chat Stream (ICS) - Core
 
-[English](README.md)
+[English](README.md) · 支持让 AI agent 替你部署:见 [AGENTS.md](AGENTS.md)(含自带 MCP server 用法)
 
 ICS-Core 是一个超轻量级、零数据库（DB-Less）、面向“人机协同（HITL）”与“跨设备数据流”设计的极简剪贴板及文件中转站。
 
@@ -16,7 +16,7 @@ ICS-Core 是一个超轻量级、零数据库（DB-Less）、面向“人机协�
 *   **Web 客户端 (HTML5/JS)**：提供极致阅读器体验的单页应用。
     *   **亮色纸质护眼主题**：全天候护眼配色，自适应设备高度（防软键盘遮挡），实现 100dvh 无缝体验。
     *   **多文件无缝秒传**：深度整合系统文件管理器，支持多文件并发选择并自动上传，告别多余的“确认”点击。
-*   **AI Pipeline (智能管道 / Go，内置)**：与 Message Bus 同进程运行的被动消费者。它监听消息流，命中触发词（`@ds`/`@mi`/`@ag`/`@cc`）时路由到对应 AI 后端（DeepSeek / 小米 MiMo），把回复以 `device=ai` 推回流。详见 [§8 AI Pipeline 与触发词路由](#8-ai-pipeline-与触发词路由)。
+*   **AI Pipeline (智能管道 / Go，内置)**：与 Message Bus 同进程运行的被动消费者。它监听消息流，命中触发词（`@ds`/`@mi`/`@ag`/`@cc`）时路由到对应 AI 后端（DeepSeek / 小米 MiMo），把回复以 `device=ai` 推回流。触发词路由表见 `ai/router.go`。
 *   **Consumers (智能消费者 / Python/JS)**：您的本地 AI 自动化 Agent（如任务抓取、通知推送脚本）。通过标准的 API Header Token 进行鉴权消费，与核心服务彻底解耦。
 
 ---

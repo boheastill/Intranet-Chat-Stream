@@ -224,4 +224,4 @@ print("推送结果:", res_push.json())
 
 ---
 
-*作者 [Bohea Still](https://boheastill.com/?lang=zh&utm_source=github&utm_campaign=ics) — 独立开发者,承接自动化、AI 管道、软硬件集成项目。*
+*作者 [Bohea Still](https://boheastill.com/?lang=zh&r=gh-ics) — 独立开发者,承接自动化、AI 管道、软硬件集成项目。*

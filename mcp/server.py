@@ -30,7 +30,7 @@ def list_messages(channel: str = "") -> List[Dict[str, Any]]:
         channel: Optional channel name to fetch messages from a specific namespace.
     """
     params = {"channel": channel} if channel else {}
-    resp = requests.get(f"{ICS_BASE_URL}/api/list", headers=get_headers(), params=params)
+    resp = requests.get(f"{ICS_BASE_URL}/api/list", headers=get_headers(), params=params, timeout=30)
     resp.raise_for_status()
     return resp.json()
 
@@ -44,7 +44,7 @@ def read_message(item_id: str) -> str:
         item_id: The unique ID of the message/file (e.g. 'upwork/1780183356_pc_text.txt')
     """
     # The /api/download/ endpoint serves the raw file contents
-    resp = requests.get(f"{ICS_BASE_URL}/api/download/{item_id}", headers=get_headers())
+    resp = requests.get(f"{ICS_BASE_URL}/api/download/{item_id}", headers=get_headers(), timeout=30)
     resp.raise_for_status()
     return resp.text
 
@@ -65,7 +65,7 @@ def push_message(text: str, device: str = "ai", channel: str = "") -> Dict[str, 
         "device": (None, device)
     }
     params = {"channel": channel} if channel else {}
-    resp = requests.post(f"{ICS_BASE_URL}/api/push", headers=get_headers(), params=params, files=multipart_data)
+    resp = requests.post(f"{ICS_BASE_URL}/api/push", headers=get_headers(), params=params, files=multipart_data, timeout=30)
     resp.raise_for_status()
     return resp.json()
 
@@ -89,7 +89,7 @@ def push_file(file_path: str, device: str = "ai", channel: str = "") -> Dict[str
             "file": (filename, f),
             "device": (None, device),
         }
-        resp = requests.post(f"{ICS_BASE_URL}/api/push", headers=get_headers(), params=params, files=multipart_data)
+        resp = requests.post(f"{ICS_BASE_URL}/api/push", headers=get_headers(), params=params, files=multipart_data, timeout=30)
     resp.raise_for_status()
     return resp.json()
 
@@ -109,7 +109,7 @@ def manage_message(item_id: str, action: str) -> Dict[str, Any]:
         "id": item_id,
         "action": action
     }
-    resp = requests.post(f"{ICS_BASE_URL}/api/action", headers=get_headers(), json=payload)
+    resp = requests.post(f"{ICS_BASE_URL}/api/action", headers=get_headers(), json=payload, timeout=30)
     resp.raise_for_status()
     return resp.json()
 

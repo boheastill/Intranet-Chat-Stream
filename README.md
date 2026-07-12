@@ -13,7 +13,7 @@ Think of it as a private, persistent clipboard-meets-message-bus: every device (
 |---|---|
 | ![Web UI on desktop](docs/screenshot-desktop.png) | ![Web UI on mobile](docs/screenshot-mobile.png) |
 
-*One stream shared by phone 📱, PC 💻 and AI agents 🤖 — the web UI is currently Chinese-first; full API and docs are in English.*
+*One stream shared by phone 📱, PC 💻 and AI agents 🤖 — the web UI is bilingual (English default, 中文 toggle in the header).*
 
 ## Why ICS
 
@@ -62,13 +62,14 @@ Your agent installs it, hardens the defaults, connects itself as a consumer (or 
 go run .        # or: go build -o ics && ./ics
 ```
 
-First run generates `config.json` with a random 32-char token and prints it. Open `http://127.0.0.1:6666`, paste the token, done.
+First run generates `config.json` and prints a ready-to-open logged-in URL (`http://127.0.0.1:8666/?token=...`). That's it.
 
 Change the defaults in `config.json` before exposing the service anywhere:
 
 - `token` — auto-generated API key (header `X-Auth-Token`)
 - `password` — 8-digit fallback password (default `66666666` — **change it**)
 - `login_key` — URL knock parameter that reveals the password login (default `vip` — **change it**)
+- `port` — loopback port (default `8666`; avoid 6665–6669, which browsers block as unsafe ports)
 
 ## Security model
 

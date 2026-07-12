@@ -133,7 +133,7 @@ func parseFilename(filename string, targetDir string) (*Message, error) {
 					if err != nil && err != io.EOF {
 						msg.Content = "[Error: failed to read partial text message]"
 					} else {
-						msg.Content = string(buf[:n]) + "\n... [内容过长已截断，请下载完整文件]"
+						msg.Content = string(buf[:n]) + "\n... [truncated — download the full file to read everything]"
 					}
 				}
 			}

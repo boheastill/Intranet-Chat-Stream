@@ -15,7 +15,6 @@ import (
 const (
 	filesDir    = "./files"
 	staticDir   = "./static"
-	port        = ":6666"
 	maxFileSize = 500 * 1024 * 1024 // 500 MB maximum per upload
 )
 
@@ -54,8 +53,9 @@ func Run(cfg Config) error {
 	handler := tokenAuthMiddleware(mux, config.Token)
 
 	// Listen only on 127.0.0.1 (Cloudflare Tunnel forwards locally)
-	bindAddr := "127.0.0.1" + port
+	bindAddr := fmt.Sprintf("127.0.0.1:%d", config.Port)
 	log.Printf("Starting ICS Message Bus locally on %s...", bindAddr)
+	log.Printf("Web UI (logged in): http://%s/?token=%s", bindAddr, config.Token)
 	return http.ListenAndServe(bindAddr, handler)
 }
 

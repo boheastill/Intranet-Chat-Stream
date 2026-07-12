@@ -644,16 +644,17 @@
             <div class="logo-icon">C</div>
             <h1 class="logo-title">Intranet Chat Stream</h1>
             <select id="channelSelect" class="channel-selector">
-                <option value="">主频道(默认)</option>
-                <option value="upwork">海外接单 (Upwork)</option>
-                <option value="syslog">系统运行日志 (SysLog)</option>
-                <option value="lab">代码实验(Lab)</option>
+                <option value="" data-i18n="ch_main">General (default)</option>
+                <option value="upwork" data-i18n="ch_work">Client work</option>
+                <option value="syslog" data-i18n="ch_syslog">System logs</option>
+                <option value="lab" data-i18n="ch_lab">Code lab</option>
             </select>
         </div>
         <div class="status-section">
             <div id="statusDot" class="status-dot pulse"></div>
-            <span id="statusText">正在同步...</span>
-            <button id="btnLogoutHeader" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; margin-left: 0.75rem; display: inline-flex; align-items: center; justify-content: center; outline: none; transition: color 0.2s;" title="退出登录">
+            <span id="statusText" data-i18n="syncing">Syncing...</span>
+            <button id="langToggle" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); cursor: pointer; margin-left: 0.75rem; border-radius: 0.5rem; padding: 0.1rem 0.5rem; font-size: 0.75rem; outline: none;" title="Language">EN</button>
+            <button id="btnLogoutHeader" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; margin-left: 0.75rem; display: inline-flex; align-items: center; justify-content: center; outline: none; transition: color 0.2s;" title="Sign out" data-i18n-title="logout_title">
                 <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="pointer-events: none;">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
                 </svg>
@@ -669,15 +670,15 @@
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
                 </svg>
-                <p>暂无消息流。您可以粘贴剪贴板文字或拖入文件开始。</p>
+                <p data-i18n="empty">No messages yet. Paste text or drop a file to start.</p>
             </div>
         </main>
 
         <!-- Drag Over Overlay -->
         <div id="dragOverlay" class="drag-overlay">
             <div class="drag-overlay-card">
-                <h3 style="color:#818cf8; margin-bottom: 0.5rem;">松开以上传文件</h3>
-                <p style="color:var(--text-secondary); font-size: 0.9rem;">拖放至此安全投递</p>
+                <h3 style="color:#818cf8; margin-bottom: 0.5rem;" data-i18n="drop_title">Release to upload</h3>
+                <p style="color:var(--text-secondary); font-size: 0.9rem;" data-i18n="drop_sub">Drop here to send</p>
             </div>
         </div>
 
@@ -685,7 +686,7 @@
         <div class="input-panel">
             <form id="pushForm">
                 <div class="input-box-wrapper">
-                    <textarea id="textInput" class="text-textarea" placeholder="输入或粘贴文字 (Ctrl + Enter 投递)..."></textarea>
+                    <textarea id="textInput" class="text-textarea" placeholder="Type or paste text (Ctrl + Enter to send)..." data-i18n-ph="input_ph"></textarea>
                     
                     <div class="panel-footer">
                         <!-- File Upload Indicator -->
@@ -694,14 +695,14 @@
                                 <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="margin-right: 0.25rem;">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
                                 </svg>
-                                <span>选择/拖入文件</span>
+                                <span data-i18n="choose_file">Choose / drop files</span>
                             </label>
                             <input type="file" id="fileInput" class="file-input" multiple>
                         </div>
 
                         <!-- Submit Button -->
                         <button type="submit" class="submit-btn">
-                            <span>投递</span>
+                            <span data-i18n="send">Send</span>
                             <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
                             </svg>
@@ -726,8 +727,8 @@
     <div id="loginModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(11, 13, 17, 0.96); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); display: none; align-items: center; justify-content: center; z-index: 1000;">
         <div style="background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 1.5rem; padding: 2.5rem; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 15px 35px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 1.5rem;">
             <div class="logo-icon" style="margin: 0 auto; width: 3.5rem; height: 3.5rem; font-size: 1.6rem; border-radius: 0.8rem;">C</div>
-            <h2 id="loginTitle" style="font-size: 1.4rem; font-weight: 600; background: linear-gradient(to right, #ffffff, var(--text-secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">需要身份验证</h2>
-            <p id="loginSubtitle" style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.4;">请输入您的安全 Token 或密保密码</p>
+            <h2 id="loginTitle" style="font-size: 1.4rem; font-weight: 600; background: linear-gradient(to right, #ffffff, var(--text-secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;" data-i18n="login_title_token">Authentication required</h2>
+            <p id="loginSubtitle" style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.4;" data-i18n="login_sub_token">Enter your access token or fallback password</p>
             
             <!-- Token input view -->
             <div id="tokenInputContainer" style="width: 100%; display: flex; flex-direction: column; gap: 1rem;">
@@ -736,13 +737,13 @@
 
             <!-- Emergency Password input view -->
             <div id="emailInputContainer" style="width: 100%; display: none; flex-direction: column; gap: 1rem;">
-                <input type="password" id="passwordField" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 1rem; border-radius: 0.75rem; font-size: 1.1rem; text-align: center; outline: none; transition: border-color 0.2s;" placeholder="请输入密保密码">
+                <input type="password" id="passwordField" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 1rem; border-radius: 0.75rem; font-size: 1.1rem; text-align: center; outline: none; transition: border-color 0.2s;" placeholder="Enter fallback password" data-i18n-ph="pw_ph">
             </div>
 
-            <button id="btnLogin" class="submit-btn" style="width: 100%; justify-content: center; padding: 0.8rem 1rem; font-size: 0.95rem; border-radius: 0.75rem;">验证并进入</button>
+            <button id="btnLogin" class="submit-btn" style="width: 100%; justify-content: center; padding: 0.8rem 1rem; font-size: 0.95rem; border-radius: 0.75rem;" data-i18n="login_btn">Verify &amp; enter</button>
             
             <div style="margin-top: 0.5rem; display: none;" id="toggleLoginContainer">
-                <a href="#" id="toggleLoginMode" style="color: var(--text-secondary); font-size: 0.8rem; text-decoration: underline; cursor: pointer; transition: color 0.2s;">使用密保密码登录</a>
+                <a href="#" id="toggleLoginMode" style="color: var(--text-secondary); font-size: 0.8rem; text-decoration: underline; cursor: pointer; transition: color 0.2s;" data-i18n="to_pw">Use fallback password</a>
             </div>
         </div>
     </div>
@@ -790,6 +791,80 @@
 
         // Initialize Authentication flow
         initAuth();
+
+        // ---- i18n ----
+        const I18N = {
+            en: {
+                ch_main: 'General (default)', ch_work: 'Client work', ch_syslog: 'System logs', ch_lab: 'Code lab',
+                syncing: 'Syncing...', logout_title: 'Sign out',
+                empty: 'No messages yet. Paste text or drop a file to start.',
+                drop_title: 'Release to upload', drop_sub: 'Drop here to send',
+                input_ph: 'Type or paste text (Ctrl + Enter to send)...',
+                choose_file: 'Choose / drop files', send: 'Send',
+                login_title_token: 'Authentication required',
+                login_sub_token: 'Enter your access token or fallback password',
+                pw_ph: 'Enter fallback password', login_btn: 'Verify & enter',
+                to_pw: 'Use fallback password', to_token: 'Use access token',
+                login_title_pw: 'Password verification', login_sub_pw: 'Verify with your fallback password',
+                verifying: 'Verifying...', verify_failed: 'Verification failed',
+                no_token: 'No access token provided',
+                login_failed: 'Login failed — check the password and URL key',
+                sync_fail: 'Sync failure', last_sync: 'Last sync', offline: 'Offline / connection timeout',
+                pinned_badge: 'Pinned', copy_tip: 'Click to copy', copied: 'Copied', copy: 'Copy',
+                download_full: 'Full text', unpin: 'Unpin', pin: 'Pin', download: 'Download', del: 'Delete',
+                confirm_del: 'Delete this card? (permanent, cannot be undone)',
+                action_fail: 'Action failed', uploading: 'Uploading...',
+                push_fail: 'Send failed: ', net_err: 'Network error while sending the file.',
+                confirm_logout: 'Sign out of this session?'
+            },
+            zh: {
+                ch_main: '主频道(默认)', ch_work: '接单频道', ch_syslog: '系统运行日志', ch_lab: '代码实验(Lab)',
+                syncing: '正在同步...', logout_title: '退出登录',
+                empty: '暂无消息流。您可以粘贴剪贴板文字或拖入文件开始。',
+                drop_title: '松开以上传文件', drop_sub: '拖放至此安全投递',
+                input_ph: '输入或粘贴文字 (Ctrl + Enter 投递)...',
+                choose_file: '选择/拖入文件', send: '投递',
+                login_title_token: '需要身份验证',
+                login_sub_token: '请输入您的安全 Token 或密保密码',
+                pw_ph: '请输入密保密码', login_btn: '验证并进入',
+                to_pw: '使用密保密码登录', to_token: '使用安全 Token 登录',
+                login_title_pw: '密保密码验证', login_sub_pw: '通过密保密码验证',
+                verifying: '正在验证...', verify_failed: '验证失败',
+                no_token: '未提供安全 Token',
+                login_failed: '登录验证失败，请检查密码及 URL 参数',
+                sync_fail: '同步故障', last_sync: '上次同步', offline: '离线/链接超时',
+                pinned_badge: '置顶', copy_tip: '点击直接复制全文', copied: '已复制', copy: '复制',
+                download_full: '下载全文', unpin: '取消保护', pin: '置顶保护', download: '下载', del: '删除',
+                confirm_del: '确认删除此卡片？（物理删除不可恢复）',
+                action_fail: '操作执行失败', uploading: '上传中...',
+                push_fail: '投递失败: ', net_err: '文件投递过程中发生网络错误。',
+                confirm_logout: '是否确认退出当前登录？'
+            }
+        };
+        let LANG = localStorage.getItem('ics_lang') ||
+            (((navigator.language || '').toLowerCase().startsWith('zh')) ? 'zh' : 'en');
+        function t(key) {
+            const d = I18N[LANG] || I18N.en;
+            return d[key] !== undefined ? d[key] : (I18N.en[key] !== undefined ? I18N.en[key] : key);
+        }
+        function applyI18n() {
+            document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+            document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
+            document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
+            const lt = document.getElementById('langToggle');
+            if (lt) lt.textContent = (LANG === 'zh') ? 'EN' : '中';
+            document.documentElement.lang = (LANG === 'zh') ? 'zh-CN' : 'en';
+        }
+        document.addEventListener('DOMContentLoaded', () => {
+            applyI18n();
+            const lt = document.getElementById('langToggle');
+            if (lt) lt.onclick = () => {
+                LANG = (LANG === 'zh') ? 'en' : 'zh';
+                localStorage.setItem('ics_lang', LANG);
+                applyI18n();
+                if (typeof fetchList === 'function' && typeof token !== 'undefined' && token) fetchList();
+            };
+        });
 
         function initAuth() {
             // 1. Intercept Token in URL query parameter (for automatic setups or one-click links)
@@ -860,16 +935,16 @@
             if (mode === 'email') {
                 tokenContainer.style.display = 'none';
                 emailContainer.style.display = 'flex';
-                toggleLink.innerText = '使用安全 Token 登录';
-                loginTitle.innerText = '密保密码验证';
-                loginSubtitle.innerText = '通过密保密码验证';
+                toggleLink.innerText = t('to_token');
+                loginTitle.innerText = t('login_title_pw');
+                loginSubtitle.innerText = t('login_sub_pw');
                 passwordField.focus();
             } else {
                 tokenContainer.style.display = 'flex';
                 emailContainer.style.display = 'none';
-                toggleLink.innerText = '使用密保密码登录';
-                loginTitle.innerText = '需要身份验证';
-                loginSubtitle.innerText = '请输入您的安全 Token 或密保密码';
+                toggleLink.innerText = t('to_pw');
+                loginTitle.innerText = t('login_title_token');
+                loginSubtitle.innerText = t('login_sub_token');
                 tokenField.focus();
             }
         }
@@ -894,7 +969,7 @@
 
                 passwordField.style.borderColor = 'var(--border-color)';
                 btnLogin.disabled = true;
-                btnLogin.innerText = '正在验证...';
+                btnLogin.innerText = t('verifying');
 
                 try {
                     const response = await fetch('/api/login', {
@@ -905,7 +980,7 @@
 
                     if (!response.ok) {
                         const data = await response.json();
-                        throw new Error(data.error || '验证失败');
+                        throw new Error(data.error || t('verify_failed'));
                     }
 
                     const data = await response.json();
@@ -915,14 +990,14 @@
                         loginModal.style.display = 'none';
                         startService();
                     } else {
-                        throw new Error('未提供安全 Token');
+                        throw new Error(t('no_token'));
                     }
                 } catch (err) {
-                    alert(err.message || '登录验证失败，请检查密码及 URL 参数');
+                    alert(err.message || t('login_failed'));
                     passwordField.style.borderColor = 'var(--danger-color)';
                 } finally {
                     btnLogin.disabled = false;
-                    btnLogin.innerText = '验证并进入';
+                    btnLogin.innerText = t('login_btn');
                 }
             }
         }
@@ -981,7 +1056,7 @@
                     handleAuthFailure();
                     return;
                 }
-                if (!response.ok) throw new Error('同步故障');
+                if (!response.ok) throw new Error(t('sync_fail'));
                 
                 const data = await response.json();
                 
@@ -1003,12 +1078,12 @@
                 const limitStr = formatSizeHelper(limitBytes);
 
                 const nowTime = new Date().toTimeString().split(' ')[0];
-                statusText.innerText = `上次同步 ${nowTime} | ${usedStr} / ${limitStr}`;
+                statusText.innerText = `${t('last_sync')} ${nowTime} | ${usedStr} / ${limitStr}`;
             } catch (err) {
                 console.error(err);
                 statusDot.classList.add('error');
                 statusDot.classList.remove('pulse');
-                statusText.innerText = '离线/链接超时';
+                statusText.innerText = t('offline');
             } finally {
                 isPolling = false;
             }
@@ -1022,7 +1097,7 @@
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
                         </svg>
-                        <p>暂无消息流。您可以粘贴剪贴板文字或拖入文件开始。</p>
+                        <p>${t('empty')}</p>
                     </div>`;
                 return;
             }
@@ -1074,7 +1149,7 @@
                             <svg width="10" height="10" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path>
                             </svg>
-                            置顶
+                            ${t('pinned_badge')}
                         </span>`;
                 }
                 bubbleMain.appendChild(meta);
@@ -1086,12 +1161,12 @@
                 if (msg.type === 'text') {
                     bubbleContent.innerText = msg.content;
                     bubbleContent.style.cursor = 'pointer';
-                    bubbleContent.title = '点击直接复制全文';
+                    bubbleContent.title = t('copy_tip');
                     bubbleContent.onclick = (e) => {
                         e.stopPropagation();
                         navigator.clipboard.writeText(msg.content).then(() => {
                             const tip = document.createElement('span');
-                            tip.innerText = '已复制';
+                            tip.innerText = t('copied');
                             tip.style.cssText = 'position:absolute; right:10px; top:-18px; font-size:0.7rem; color:var(--success-color); background:var(--surface-color); padding:2px 6px; border-radius:4px; border:1px solid var(--border-color); border-bottom:none;';
                             bubbleContent.appendChild(tip);
                             setTimeout(() => tip.remove(), 1000);
@@ -1145,32 +1220,32 @@
                         <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path>
                         </svg>
-                        <span>复制</span>
+                        <span>${t('copy')}</span>
                     `;
                     copyBtn.onclick = (e) => {
                         e.stopPropagation();
                         navigator.clipboard.writeText(msg.content).then(() => {
-                            copyBtn.innerHTML = '<span>已复制</span>';
+                            copyBtn.innerHTML = `<span>${t('copied')}</span>`;
                             setTimeout(() => {
                                 copyBtn.innerHTML = `
                                     <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path>
                                     </svg>
-                                    <span>复制</span>`;
+                                    <span>${t('copy')}</span>`;
                             }, 1500);
                         });
                     };
                     actions.appendChild(copyBtn);
 
                     // Download full text (only for truncated content)
-                    if (msg.content.includes('[内容过长已截断，请下载完整文件]')) {
+                    if (msg.content.includes('[内容过长已截断') || msg.content.includes('[truncated')) {
                         const dlBtn = document.createElement('button');
                         dlBtn.className = 'btn-action';
                         dlBtn.innerHTML = `
                             <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
                             </svg>
-                            <span>下载全文</span>
+                            <span>${t('download_full')}</span>
                         `;
                         dlBtn.onclick = (e) => {
                             e.stopPropagation();
@@ -1192,12 +1267,12 @@
                         <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                         </svg>
-                        <span>取消保护</span>
+                        <span>${t('unpin')}</span>
                     ` : `
                         <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
                         </svg>
-                        <span>置顶保护</span>
+                        <span>${t('pin')}</span>
                     `;
                     pinBtn.onclick = (e) => {
                         e.stopPropagation();
@@ -1214,7 +1289,7 @@
                         <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
                         </svg>
-                        <span>下载</span>
+                        <span>${t('download')}</span>
                     `;
                     dlBtn.onclick = (e) => {
                         e.stopPropagation();
@@ -1236,11 +1311,11 @@
                     <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                     </svg>
-                    <span>删除</span>
+                    <span>${t('del')}</span>
                 `;
                 delBtn.onclick = (e) => {
                     e.stopPropagation();
-                    if (confirm('确认删除此卡片？（物理删除不可恢复）')) {
+                    if (confirm(t('confirm_del'))) {
                         triggerAction(msg.id, 'delete');
                     }
                 };
@@ -1268,7 +1343,7 @@
                     handleAuthFailure();
                     return;
                 }
-                if (!response.ok) throw new Error('操作执行失败');
+                if (!response.ok) throw new Error(t('action_fail'));
                 fetchList(); // Instant UI sync
             } catch (err) {
                 alert(err.message);
@@ -1304,7 +1379,7 @@
                     progressBar.style.width = percent + '%';
                     
                     // Show progress in the header status bar for clear visibility
-                    statusText.innerText = `上传中... ${percent}%`;
+                    statusText.innerText = `${t('uploading')} ${percent}%`;
                     statusDot.className = 'status-dot pulse';
                     statusDot.style.backgroundColor = 'var(--pin-color)'; // Orange pulse during upload
                 }
@@ -1328,7 +1403,7 @@
                         }, 50);
                     });
                 } else {
-                    alert('投递失败: ' + xhr.responseText);
+                    alert(t('push_fail') + xhr.responseText);
                 }
             };
 
@@ -1336,7 +1411,7 @@
                 progressOverlay.style.display = 'none';
                 progressBar.style.width = '0%';
                 statusDot.style.backgroundColor = ''; // Reset dot color
-                alert('文件投递过程中发生网络错误。');
+                alert(t('net_err'));
             };
 
             xhr.send(formData);
@@ -1405,7 +1480,7 @@
 
         // Header Logout click handler
         document.getElementById('btnLogoutHeader').onclick = () => {
-            if (confirm('是否确认退出当前登录？')) {
+            if (confirm(t('confirm_logout'))) {
                 handleAuthFailure();
             }
         };

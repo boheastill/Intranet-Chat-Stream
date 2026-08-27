@@ -209,6 +209,11 @@ func cleanupOldFiles() {
 		if err != nil || info.IsDir() {
 			return nil
 		}
+		// Chunked-upload temps are managed by their own janitor (sweepStaleChunks);
+		// never count or roll-delete files of an upload in progress.
+		if strings.Contains(path, ".chunks") {
+			return nil
+		}
 		totalSize += info.Size()
 		name := filepath.Base(path)
 		if !strings.HasPrefix(name, "pinned_") {

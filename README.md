@@ -22,7 +22,8 @@ Think of it as a private, persistent clipboard-meets-message-bus: every device (
 - **One stream, every device** — paste a verification code on your PC, read it on your phone. Drop files from mobile, pull them from a script. Real-time sync via SSE.
 - **AI agents are first-class citizens** — a built-in pipeline watches the stream; messages hitting a trigger word (`@ds`, `@mi`, `@ag`, `@cc`) are routed to a configurable AI backend (DeepSeek / Xiaomi MiMo), and replies flow back into the stream tagged `device=ai`. External agents integrate with ~10 lines of Python.
 - **Dumb pipe, smart consumers** — the core stays a stateless, high-concurrency data channel. Intelligence lives at the edges, fully decoupled behind token auth.
-- **Designed for tunnel-only exposure** — binds to `127.0.0.1` only; pair it with Cloudflare Tunnel (or any reverse proxy) so no inbound port is ever open to the internet.
+- **Chunked, resumable uploads** — files above ~90 MB are automatically sent in 8 MB slices (init / status / data / complete endpoints), so videos sail past proxies that cap a single request body (e.g. Cloudflare's free-plan ~100 MB limit) and interrupted transfers resume from where they stopped.
+- **Designed for tunnel-only exposure** — binds to `127.0.0.1` only; pair it with Cloudflare Tunnel (or any reverse proxy) so no inbound port is ever open to the internet. Login throttling is applied globally as well as per source IP: failed attempts slow *every* wrong login down (capped at 60 s) while correct credentials pass instantly — rotating IPs buy an attacker nothing.
 
 ## Architecture
 

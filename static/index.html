@@ -815,7 +815,9 @@
                 confirm_del: 'Delete this card? (permanent, cannot be undone)',
                 action_fail: 'Action failed', uploading: 'Uploading...',
                 push_fail: 'Send failed: ', net_err: 'Network error while sending the file.',
-                confirm_logout: 'Sign out of this session?'
+                err_too_large: 'File exceeds the 500 MB server limit.', err_server: 'Server rejected the upload (HTTP ',
+                err_conn: 'Connection lost — resuming where possible…', retrying: 'Retrying',
+                chunk_mode: 'Large file: chunked upload engaged', confirm_logout: 'Sign out of this session?'
             },
             zh: {
                 ch_main: '主频道(默认)', ch_work: '接单频道', ch_syslog: '系统运行日志', ch_lab: '代码实验(Lab)',
@@ -838,7 +840,9 @@
                 confirm_del: '确认删除此卡片？（物理删除不可恢复）',
                 action_fail: '操作执行失败', uploading: '上传中...',
                 push_fail: '投递失败: ', net_err: '文件投递过程中发生网络错误。',
-                confirm_logout: '是否确认退出当前登录？'
+                err_too_large: '文件超过服务器 500 MB 上限。', err_server: '服务器拒绝上传 (HTTP ',
+                err_conn: '连接中断——正在尝试断点续传…', retrying: '重试中',
+                chunk_mode: '大文件：已启用分片上传', confirm_logout: '是否确认退出当前登录？'
             }
         };
         let LANG = localStorage.getItem('ics_lang') ||
@@ -1351,12 +1355,138 @@
         }
 
         // Upload a single item (text or file)
+        // ---- Upload plumbing -------------------------------------------------
+        // Files above CHUNK_THRESHOLD go through the chunked endpoints so the
+        // whole body never has to fit inside a single request (proxies such as
+        // Cloudflare free plans cut connections around 100 MB with an opaque
+        // 413). Every failure class surfaces as a readable message — never a
+        // silent spinner or a raw HTML dump.
+        const CHUNK_THRESHOLD = 90 * 1024 * 1024;
+        const CHUNK_SIZE = 8 * 1024 * 1024;
+
+        function setProgress(pct, note) {
+            progressOverlay.style.display = 'block';
+            progressBar.style.width = pct + '%';
+            statusText.innerText = note || `${t('uploading')} ${pct}%`;
+            statusDot.className = 'status-dot pulse';
+            statusDot.style.backgroundColor = 'var(--pin-color)';
+        }
+        function resetProgress() {
+            progressOverlay.style.display = 'none';
+            progressBar.style.width = '0%';
+            statusText.innerText = '';
+            statusDot.className = 'status-dot';
+            statusDot.style.backgroundColor = '';
+        }
+
+        // Map any upload failure to a human-readable, localized message.
+        // Returns null when the failure was already handled (e.g. re-login).
+        function friendlyUploadError(status, respText) {
+            if (status === 401 || status === 403) { handleAuthFailure(); return null; }
+            if (status === 413) return t('err_too_large');
+            if (status >= 500) return t('err_server') + status + ')';
+            const body = (respText || '').replace(/<[^>]*>/g, '').trim();
+            return t('push_fail') + (body ? body.slice(0, 120) : 'HTTP ' + status);
+        }
+        async function authedFetch(url, opts) {
+            opts.headers = Object.assign({ 'X-Auth-Token': token }, opts.headers || {});
+            return fetch(url, opts);
+        }
+
+        async function sendChunked(file, text, currentDevice) {
+            try {
+                setProgress(2, t('chunk_mode'));
+                if (text && text.trim()) {   // piggyback text alongside the file
+                    await new Promise((resolve) => {
+                        const fd = new FormData(); fd.append('text', text);
+                        fd.append('device', currentDevice);
+                        const xhr = new XMLHttpRequest();
+                        xhr.open('POST', currentChannel ? `/api/push?channel=${currentChannel}` : '/api/push', true);
+                        xhr.setRequestHeader('X-Auth-Token', token);
+                        xhr.onload = resolve; xhr.onerror = resolve; // best effort; file result is authoritative
+                        xhr.send(fd);
+                    });
+                }
+
+                const channelQs = currentChannel ? `?channel=${encodeURIComponent(currentChannel)}` : '';
+                const initResp = await authedFetch(`/api/push/chunk/init${channelQs}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename: file.name, size: file.size, device: currentDevice })
+                });
+                if (!initResp.ok) {
+                    throw new Error(friendlyUploadError(initResp.status, '') || `HTTP ${initResp.status}`);
+                }
+                const id = (await initResp.json()).upload_id;
+
+                let offset = 0, retry = 0;
+                while (offset < file.size) {
+                    try {
+                        const resp = await new Promise((resolve, reject) => {
+                            const xhr = new XMLHttpRequest();
+                            xhr.open('PUT', `/api/push/chunk/data/${id}?offset=${offset}`, true);
+                            xhr.setRequestHeader('X-Auth-Token', token);
+                            xhr.upload.onprogress = e => {
+                                if (e.lengthComputable) setProgress(Math.round(((offset + e.loaded) / file.size) * 100));
+                            };
+                            xhr.onload = () => resolve(xhr);
+                            xhr.onerror = () => reject(new Error('conn'));
+                            xhr.onabort = () => reject(new Error('abort'));
+                            xhr.send(file.slice(offset, offset + CHUNK_SIZE));
+                        });
+                        if (resp.status === 401 || resp.status === 403) { handleAuthFailure(); resetProgress(); return; }
+                        if (resp.status !== 200) {
+                            throw new Error(friendlyUploadError(resp.status, resp.responseText) || `HTTP ${resp.status}`);
+                        }
+                        offset = Number((await resp.json()).written);
+                        retry = 0;
+                    } catch (err) {
+                        // Connection-level drops are retried with resume: ask the
+                        // server where it actually stopped before sending again.
+                        if (retry >= 3) throw err;
+                        retry++;
+                        setProgress(Math.round((offset / file.size) * 100),
+                            `${t('retrying')} (${retry}/3) — ${t('err_conn')}`);
+                        await new Promise(r => setTimeout(r, 1000 * retry));
+                        try {
+                            const st = await authedFetch(`/api/push/chunk/status?id=${id}`, {});
+                            if (st.ok) offset = Number((await st.json()).written);
+                        } catch (_) { /* keep client-side offset */ }
+                    }
+                }
+
+                const done = await authedFetch('/api/push/chunk/complete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+                if (done.status === 401 || done.status === 403) { handleAuthFailure(); resetProgress(); return; }
+                if (!done.ok) {
+                    let msg = friendlyUploadError(done.status, '');
+                    if (!msg) { resetProgress(); return; }
+                    try { const j = await done.json(); if (j.error === 'incomplete upload') msg = `${t('push_fail')}${j.written}/${j.expected}B`; } catch (_) {}
+                    throw new Error(msg);
+                }
+
+                resetProgress();
+                fetchList().then(() => setTimeout(() => timeline.scrollTo({ top: 0, behavior: 'smooth' }), 50));
+            } catch (err) {
+                resetProgress();
+                alert(t('net_err') + ' (' + (err && err.message ? err.message : 'unknown') + ')');
+            }
+        }
+
         function uploadItem(text, file) {
             if (!text && !file) return;
 
             // Determine device type dynamically
             const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
             const currentDevice = isMobileDevice ? 'mobile' : 'pc';
+
+            if (file && file.size > CHUNK_THRESHOLD) {
+                sendChunked(file, text, currentDevice);
+                return;
+            }
 
             const formData = new FormData();
             if (text) formData.append('text', text);
@@ -1367,34 +1497,18 @@
             const xhr = new XMLHttpRequest();
             const url = currentChannel ? `/api/push?channel=${currentChannel}` : '/api/push';
             xhr.open('POST', url, true);
-            
+
             // Set security token header
             xhr.setRequestHeader('X-Auth-Token', token);
 
             // Upload progress updates
             xhr.upload.onprogress = e => {
-                if (e.lengthComputable) {
-                    const percent = Math.round((e.loaded / e.total) * 100);
-                    progressOverlay.style.display = 'block';
-                    progressBar.style.width = percent + '%';
-                    
-                    // Show progress in the header status bar for clear visibility
-                    statusText.innerText = `${t('uploading')} ${percent}%`;
-                    statusDot.className = 'status-dot pulse';
-                    statusDot.style.backgroundColor = 'var(--pin-color)'; // Orange pulse during upload
-                }
+                if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100));
             };
 
             xhr.onload = () => {
-                progressOverlay.style.display = 'none';
-                progressBar.style.width = '0%';
-                statusDot.style.backgroundColor = ''; // Reset dot color
-                
-                if (xhr.status === 401 || xhr.status === 403) {
-                    handleAuthFailure();
-                    return;
-                }
-                
+                resetProgress();
+
                 if (xhr.status === 201) {
                     // Instant list update and scroll to top to see the new message
                     fetchList().then(() => {
@@ -1402,17 +1516,19 @@
                             timeline.scrollTo({ top: 0, behavior: 'smooth' });
                         }, 50);
                     });
-                } else {
-                    alert(t('push_fail') + xhr.responseText);
+                    return;
                 }
+                const msg = friendlyUploadError(xhr.status, xhr.responseText);
+                if (msg !== null) alert(msg);
             };
 
             xhr.onerror = () => {
-                progressOverlay.style.display = 'none';
-                progressBar.style.width = '0%';
-                statusDot.style.backgroundColor = ''; // Reset dot color
+                resetProgress();
                 alert(t('net_err'));
             };
+
+            xhr.onabort = () => resetProgress();
+            window.addEventListener('beforeunload', resetProgress);
 
             xhr.send(formData);
         }

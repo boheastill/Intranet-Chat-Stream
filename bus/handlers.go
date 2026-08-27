@@ -1,6 +1,7 @@
 package bus
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -126,13 +126,7 @@ func handlePush(w http.ResponseWriter, r *http.Request) {
 		defer file.Close()
 
 		// Sanitize filename to avoid path injection
-		origFilename := filepath.Base(header.Filename)
-		// Clean up special characters, replace space with underscore
-		reg := regexp.MustCompile(`[^a-zA-Z0-9.-_]`)
-		origFilename = reg.ReplaceAllString(origFilename, "_")
-		if origFilename == "" {
-			origFilename = "unnamed_file"
-		}
+		origFilename := sanitizeFilename(header.Filename)
 
 		ts := uniqueTimestamp(targetDir, now, device, origFilename)
 		filename := fmt.Sprintf("%d_%s_%s", ts, device, origFilename)
@@ -366,7 +360,48 @@ type LoginResponse struct {
 	Error  string `json:"error,omitempty"`
 }
 
-// handleLogin validates password and key with exponential backoff per IP.
+// backoffDelaySec converts a failure count into the exponential wait (capped).
+func backoffDelaySec(failCount int) int {
+	if failCount <= 0 {
+		return 0
+	}
+	d := 1 << (failCount - 1)
+	if d > 60 {
+		return 60
+	}
+	return d
+}
+
+// loginBlocked reports the remaining seconds a tracker still gates us for.
+func loginBlocked(tracker IPAttempt, now time.Time) int {
+	if tracker.FailCount <= 0 {
+		return 0
+	}
+	remaining := time.Duration(backoffDelaySec(tracker.FailCount))*time.Second - now.Sub(tracker.LastTime)
+	if remaining > 0 {
+		return int(remaining.Seconds()) + 1
+	}
+	return 0
+}
+
+// pruneIPAttempts bounds memory under distributed guessing (rotating IPs).
+func pruneIPAttempts(now time.Time) {
+	const maxTrackedIPs = 10_000
+	if len(ipAttempts) <= maxTrackedIPs {
+		return
+	}
+	for k, v := range ipAttempts {
+		if now.Sub(v.LastTime) > 24*time.Hour {
+			delete(ipAttempts, k)
+		}
+	}
+}
+
+// handleLogin validates password and key behind exponential backoff applied
+// BOTH per source IP and globally: any failed attempt slows every wrong
+// attempt down — the lever that still bites against attackers rotating IPs.
+// Correct credentials never wait (a matching answer is not a guess being
+// rate-limited; delaying it would let an attacker lock the owner out).
 func handleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
@@ -374,29 +409,6 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ip := getClientIP(r)
-
-	attemptsMu.Lock()
-	attempt, exists := ipAttempts[ip]
-	attemptsMu.Unlock()
-
-	now := time.Now()
-	if exists && attempt.FailCount > 0 {
-		// delay = 2^(FailCount-1) seconds
-		delaySec := 1 << (attempt.FailCount - 1)
-		delaySec = min(delaySec, 60)
-
-		elapsed := now.Sub(attempt.LastTime)
-		remaining := time.Duration(delaySec)*time.Second - elapsed
-		if remaining > 0 {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusTooManyRequests)
-			json.NewEncoder(w).Encode(LoginResponse{
-				Status: "error",
-				Error:  fmt.Sprintf("尝试次数过多，请等待 %d 秒后重试", int(remaining.Seconds())+1),
-			})
-			return
-		}
-	}
 
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -413,28 +425,53 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Password == config.Password && req.Key == config.LoginKey {
-		// Success: reset attempts
+	// Constant-time comparisons: never leak how much of the secret matched.
+	passwordOK := subtle.ConstantTimeCompare([]byte(req.Password), []byte(config.Password)) == 1
+	keyOK := subtle.ConstantTimeCompare([]byte(req.Key), []byte(config.LoginKey)) == 1
+
+	now := time.Now()
+	if !passwordOK || !keyOK {
 		attemptsMu.Lock()
-		delete(ipAttempts, ip)
+		wait := loginBlocked(globalAttempt, now)
+		if ipWait := loginBlocked(ipAttempts[ip], now); ipWait > wait {
+			wait = ipWait
+		}
+		pruneIPAttempts(now)
+		if wait > 0 {
+			attemptsMu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			json.NewEncoder(w).Encode(LoginResponse{
+				Status: "error",
+				Error:  fmt.Sprintf("尝试次数过多，请等待 %d 秒后重试", wait),
+			})
+			return
+		}
+		// Failure: record on both this IP and globally.
+		ipAttempt := ipAttempts[ip]
+		ipAttempt.FailCount++
+		ipAttempt.LastTime = now
+		ipAttempts[ip] = ipAttempt
+		globalAttempt.FailCount++
+		globalAttempt.LastTime = now
+		gCount := globalAttempt.FailCount
 		attemptsMu.Unlock()
 
-		log.Printf("[%s] LOGIN SUCCESS: with key=%s", ip, req.Key)
-
+		log.Printf("[%s] Failed login attempt (ip count: %d, global count: %d)", ip, ipAttempt.FailCount, gCount)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(LoginResponse{Status: "success", Token: config.Token})
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(LoginResponse{Status: "error", Error: "密码或 URL 参数错误"})
 		return
 	}
 
-	// Failure: record attempt
+	// Success: clear this IP's history and release the global brake.
 	attemptsMu.Lock()
-	attempt.FailCount++
-	attempt.LastTime = now
-	ipAttempts[ip] = attempt
+	delete(ipAttempts, ip)
+	globalAttempt = IPAttempt{}
 	attemptsMu.Unlock()
 
-	log.Printf("[%s] Failed login attempt with key: %s (Fail count: %d)", ip, req.Key, attempt.FailCount)
+	log.Printf("[%s] LOGIN SUCCESS", ip)
+
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusUnauthorized)
-	json.NewEncoder(w).Encode(LoginResponse{Status: "error", Error: "密码或 URL 参数错误"})
+	json.NewEncoder(w).Encode(LoginResponse{Status: "success", Token: config.Token})
 }

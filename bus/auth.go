@@ -1,6 +1,7 @@
 package bus
 
 import (
+	"crypto/subtle"
 	"log"
 	"net/http"
 	"strings"
@@ -17,6 +18,10 @@ type IPAttempt struct {
 var (
 	attemptsMu sync.Mutex
 	ipAttempts = make(map[string]IPAttempt)
+	// globalAttempt applies the same exponential brake to every login
+	// regardless of source — the countermeasure that still bites when an
+	// attacker rotates IPs faster than per-IP tracking can throttle them.
+	globalAttempt IPAttempt
 )
 
 // tokenAuthMiddleware enforces secret Token checks for all private API routes.
@@ -35,7 +40,7 @@ func tokenAuthMiddleware(next http.Handler, secretToken string) http.Handler {
 			token = r.URL.Query().Get("token")
 		}
 
-		if token != secretToken {
+		if subtle.ConstantTimeCompare([]byte(token), []byte(secretToken)) != 1 {
 			log.Printf("[%s] Blocked Unauthorized request: %s %s (Token mismatch)", r.RemoteAddr, r.Method, r.URL.Path)
 			http.Error(w, "Unauthorized: Invalid or missing token", http.StatusUnauthorized)
 			return

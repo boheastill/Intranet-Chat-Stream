@@ -10,13 +10,16 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 )
 
 const (
-	filesDir    = "./files"
 	staticDir   = "./static"
 	maxFileSize = 500 * 1024 * 1024 // 500 MB maximum per upload
 )
+
+// filesDir is a variable (not const) so tests can point it at a temp dir.
+var filesDir = "./files"
 
 // config holds the active server configuration, injected via Run.
 var config Config
@@ -44,6 +47,12 @@ func Run(cfg Config) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/list", handleList)
 	mux.HandleFunc("/api/push", handlePush)
+	// Chunked upload path: lets large files cross proxies that cap a single
+	// request body (e.g. Cloudflare's 100 MB per-request limit on free plans).
+	mux.HandleFunc("/api/push/chunk/init", handleChunkInit)
+	mux.HandleFunc("/api/push/chunk/status", handleChunkStatus)
+	mux.HandleFunc("/api/push/chunk/data/", handleChunkData)
+	mux.HandleFunc("/api/push/chunk/complete", handleChunkComplete)
 	mux.HandleFunc("/api/action", handleAction)
 	mux.HandleFunc("/api/stream", handleStream)
 	mux.HandleFunc("/api/login", handleLogin)
@@ -51,6 +60,13 @@ func Run(cfg Config) error {
 	mux.HandleFunc("/", serveStatic)
 
 	handler := tokenAuthMiddleware(mux, config.Token)
+
+	// Janitor: expire abandoned chunked uploads and their temp files
+	go func() {
+		for range time.Tick(time.Hour) {
+			sweepStaleChunks()
+		}
+	}()
 
 	// Listen only on 127.0.0.1 (Cloudflare Tunnel forwards locally)
 	bindAddr := fmt.Sprintf("127.0.0.1:%d", config.Port)

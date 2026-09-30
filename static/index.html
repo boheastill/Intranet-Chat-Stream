@@ -647,20 +647,18 @@
                 <option value="" data-i18n="ch_main">General (default)</option>
             </select>
             <script>
-            (async () => {
-                try {
-                    const r = await fetch('/api/channels');
-                    const chans = await r.json();
-                    const sel = document.getElementById('channelSelect');
-                    chans.filter(c => c).forEach(c => {
-                        const opt = document.createElement('option');
-                        opt.value = c;
-                        opt.textContent = c;
-                        sel.appendChild(opt);
-                    });
-                } catch(e) {}
-            })();
-            </script>
+        // channel 下拉框：从 /api/channels 热同步（30s / 回到前台时），新增 channel 自动出现
+        (function () {
+            const sel = document.getElementById('channelSelect');
+            const seen = new Set(Array.from(sel.options).map(o => o.value));
+            const refetch = () => fetch('/api/channels').then(r => r.json()).then(cs => {
+                cs.forEach(c => { if (!seen.has(c)) { seen.add(c); const o = document.createElement('option'); o.value = c; o.textContent = c || 'General (default)'; sel.appendChild(o); } });
+            }).catch(() => {});
+            refetch();
+            setInterval(refetch, 30000);
+            document.addEventListener('visibilitychange', () => { if (!document.hidden) refetch(); });
+        })();
+        </script>
         </div>
         <div class="status-section">
             <div id="statusDot" class="status-dot pulse"></div>

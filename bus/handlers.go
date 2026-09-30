@@ -3,6 +3,7 @@ package bus
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -83,7 +84,10 @@ func handlePush(w http.ResponseWriter, r *http.Request) {
 
 	// Limit request size to prevent memory exhaustion
 	r.Body = http.MaxBytesReader(w, r.Body, maxFileSize)
-	if err := r.ParseMultipartForm(32 << 20); err != nil { // 32MB in-memory buffer
+	// Accept both multipart/form-data and application/x-www-form-urlencoded.
+	// For the latter ParseMultipartForm returns http.ErrNotMultipart, but ParseForm
+	// has already populated r.Form, so a plain urlencoded text push still works.
+	if err := r.ParseMultipartForm(32 << 20); err != nil && !errors.Is(err, http.ErrNotMultipart) { // 32MB in-memory buffer
 		http.Error(w, "Request too large or invalid multipart form", http.StatusBadRequest)
 		return
 	}

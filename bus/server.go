@@ -46,6 +46,7 @@ func Run(cfg Config) error {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/list", handleList)
+	mux.HandleFunc("/api/channels", handleChannels)
 	mux.HandleFunc("/api/push", handlePush)
 	// Chunked upload path: lets large files cross proxies that cap a single
 	// request body (e.g. Cloudflare's 100 MB per-request limit on free plans).

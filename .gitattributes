@@ -1,2 +1,3 @@
 static/** linguist-vendored
 docs/** linguist-vendored
+ops/** filter=git-crypt diff=git-crypt

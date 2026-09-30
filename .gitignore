@@ -25,3 +25,6 @@
 *.swp
 dist/
 整改单.md
+secrets/
+*.pem
+*.key

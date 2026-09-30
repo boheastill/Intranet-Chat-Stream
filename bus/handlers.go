@@ -475,3 +475,19 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(LoginResponse{Status: "success", Token: config.Token})
 }
+
+// handleChannels lists existing channels (namespaces under ./files) + the default "".
+// Mechanism self-description: the pipe can name its own namespaces. No business semantics.
+func handleChannels(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	chans := []string{""} // default channel
+	entries, err := os.ReadDir(filesDir)
+	if err == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				chans = append(chans, e.Name())
+			}
+		}
+	}
+	json.NewEncoder(w).Encode(chans)
+}

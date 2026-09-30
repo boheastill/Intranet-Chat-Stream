@@ -645,10 +645,22 @@
             <h1 class="logo-title">Intranet Chat Stream</h1>
             <select id="channelSelect" class="channel-selector">
                 <option value="" data-i18n="ch_main">General (default)</option>
-                <option value="upwork" data-i18n="ch_work">Client work</option>
-                <option value="syslog" data-i18n="ch_syslog">System logs</option>
-                <option value="lab" data-i18n="ch_lab">Code lab</option>
             </select>
+            <script>
+            (async () => {
+                try {
+                    const r = await fetch('/api/channels');
+                    const chans = await r.json();
+                    const sel = document.getElementById('channelSelect');
+                    chans.filter(c => c).forEach(c => {
+                        const opt = document.createElement('option');
+                        opt.value = c;
+                        opt.textContent = c;
+                        sel.appendChild(opt);
+                    });
+                } catch(e) {}
+            })();
+            </script>
         </div>
         <div class="status-section">
             <div id="statusDot" class="status-dot pulse"></div>

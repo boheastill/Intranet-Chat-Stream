@@ -781,6 +781,13 @@
         const passwordField = document.getElementById('passwordField');
         const btnLogin = document.getElementById('btnLogin');
 
+        // Firefox 隐私模式/禁用存储时 localStorage 会抛 SecurityError → 全页 JS 崩
+        const safeStore = {
+            get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+            set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+            del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+        };
+
         let token = '';
         let lastListHash = '';
         let isPolling = false;
@@ -857,7 +864,7 @@
                 chunk_mode: '大文件：已启用分片上传', confirm_logout: '是否确认退出当前登录？'
             }
         };
-        let LANG = localStorage.getItem('ics_lang') ||
+        let LANG = safeStore.get('ics_lang') ||
             (((navigator.language || '').toLowerCase().startsWith('zh')) ? 'zh' : 'en');
         function t(key) {
             const d = I18N[LANG] || I18N.en;
@@ -876,7 +883,7 @@
             const lt = document.getElementById('langToggle');
             if (lt) lt.onclick = () => {
                 LANG = (LANG === 'zh') ? 'en' : 'zh';
-                localStorage.setItem('ics_lang', LANG);
+                safeStore.set('ics_lang', LANG);
                 applyI18n();
                 if (typeof fetchList === 'function' && typeof token !== 'undefined' && token) fetchList();
             };
@@ -887,7 +894,7 @@
             const urlParams = new URLSearchParams(window.location.search);
             const tokenParam = urlParams.get('token');
             if (tokenParam) {
-                localStorage.setItem('ics_token', tokenParam);
+                safeStore.set('ics_token', tokenParam);
                 // Wipe token from browser address bar immediately for security history protection
                 window.history.replaceState({}, document.title, window.location.pathname);
             }
@@ -906,7 +913,7 @@
             const showEmailLogin = (keyParam !== null) && (urlParams.get('login') === '1' || urlParams.get('emergency') !== null);
 
             // 2. Load token from localStorage
-            token = localStorage.getItem('ics_token');
+            token = safeStore.get('ics_token');
 
             if (!token) {
                 // If not authenticated, show password overlay modal
@@ -972,7 +979,7 @@
                     tokenField.style.borderColor = 'var(--danger-color)';
                     return;
                 }
-                localStorage.setItem('ics_token', entered);
+                safeStore.set('ics_token', entered);
                 token = entered;
                 loginModal.style.display = 'none';
                 startService();
@@ -1001,7 +1008,7 @@
 
                     const data = await response.json();
                     if (data.status === 'success' && data.token) {
-                        localStorage.setItem('ics_token', data.token);
+                        safeStore.set('ics_token', data.token);
                         token = data.token;
                         loginModal.style.display = 'none';
                         startService();
@@ -1029,7 +1036,7 @@
 
         function handleAuthFailure() {
             // Reset local cache on invalid credentials and show overlay again
-            localStorage.removeItem('ics_token');
+            safeStore.del('ics_token');
             token = '';
             if (pollingInterval) {
                 clearInterval(pollingInterval);

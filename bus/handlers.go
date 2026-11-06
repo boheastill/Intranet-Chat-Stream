@@ -442,9 +442,11 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	//   dimension 2 = you know the password
 	//
 	// An attacker guessing blind must match BOTH, so the search space is the
-	// product: 5 lowercase letters + 6 digits ≈ 1.2e13 combinations, which at the
-	// effective rate (edge limit 3 req / 10 s ≈ 26k/day) is ~6e5 years. Each
-	// factor alone would be far too weak; together they are not.
+	// product. The shipped pair is a 5-letter lowercase key plus a 4-digit
+	// password: 26^5 x 10^4 ≈ 1.2e11 combinations, which at the effective rate
+	// (edge limit 3 req / 10 s ≈ 26k/day) is roughly 6e3 years. Each factor alone
+	// is far too weak; together they are not. Note the whole margin depends on
+	// that rate limit staying in place — see SECURITY.md.
 	//
 	// The key is normalised (trim + lowercase) because it is typed by hand on a
 	// phone keyboard — being unforgiving about case is a usability bug, not a

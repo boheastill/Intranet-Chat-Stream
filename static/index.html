@@ -786,24 +786,33 @@
             const seen = new Set(Array.from(sel.options).map(o => o.value));
             const authToken = () => { try { return localStorage.getItem('ics_token') || ''; } catch (e) { return ''; } };
 
+            // Channels written by automation (pipelines, log shippers, scrapers)
+            // are not places you chat in. Listing them turned a 2-item menu into a
+            // wall of names you never chose, so they are hidden unless you are
+            // already viewing one (then it must stay selectable).
+            const HIDDEN = new Set(['ops', 'syslog', 'radar', 'gov', 'voice', 'voice-asr',
+                                    'win-setup', 'hot-test', 'research', 'tech', 'video',
+                                    'test', 'default']);
+
             function refetch() {
                 const tk = authToken();
                 if (!tk) return Promise.resolve(); // 未登录：静默跳过，登录后由 startService 触发
                 return fetch('/api/channels', { headers: { 'X-Auth-Token': tk } })
                     .then(r => (r.ok ? r.json() : []))
                     .then(cs => {
+                        const current = new URLSearchParams(window.location.search).get('channel') || '';
                         (cs || []).forEach(c => {
-                            if (!seen.has(c)) {
-                                seen.add(c);
-                                const o = document.createElement('option');
-                                o.value = c;
-                                o.textContent = c || 'General (default)';
-                                sel.appendChild(o);
-                            }
+                            if (!c) return;                       // 空字符串就是默认频道，已有选项
+                            if (HIDDEN.has(c) && c !== current) return;
+                            if (seen.has(c)) return;
+                            seen.add(c);
+                            const o = document.createElement('option');
+                            o.value = c;
+                            o.textContent = c;
+                            sel.appendChild(o);
                         });
                         // 保证 URL 里的 channel 在选项就绪后能被选中
-                        const want = new URLSearchParams(window.location.search).get('channel') || '';
-                        if (want && seen.has(want)) sel.value = want;
+                        if (current && seen.has(current)) sel.value = current;
                     })
                     .catch(() => {});
             }

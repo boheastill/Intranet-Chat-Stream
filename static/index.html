@@ -916,29 +916,41 @@
             if (!token) {
                 // If not authenticated, show password overlay modal
                 loginModal.style.display = 'flex';
-                
-                if (showEmailLogin) {
+                bindLoginEvents();
+
+                // If the URL carries an emergency key, default to password login
+                // (the key is only useful for password mode; user can still switch back to token)
+                if (showEmailLogin || keyParam) {
                     setLoginMode('email');
                 } else {
                     setLoginMode('token');
                 }
-
-                // Set up submission hooks
-                btnLogin.onclick = handleLoginSubmit;
-                tokenField.onkeydown = e => {
-                    if (e.key === 'Enter') handleLoginSubmit();
-                };
-                passwordField.onkeydown = e => {
-                    if (e.key === 'Enter') handleLoginSubmit();
-                };
-
-                document.getElementById('toggleLoginMode').onclick = (e) => {
-                    e.preventDefault();
-                    setLoginMode(loginMode === 'token' ? 'email' : 'token');
-                };
             } else {
                 startService();
             }
+        }
+
+        function bindLoginEvents() {
+            // Wire login controls; safe to call repeatedly (e.g. after auth failure)
+            btnLogin.onclick = handleLoginSubmit;
+            tokenField.onkeydown = e => {
+                if (e.key === 'Enter') handleLoginSubmit();
+            };
+            passwordField.onkeydown = e => {
+                if (e.key === 'Enter') handleLoginSubmit();
+            };
+
+            const toggleLink = document.getElementById('toggleLoginMode');
+            toggleLink.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setLoginMode(loginMode === 'token' ? 'email' : 'token');
+            };
+            // iOS Safari sometimes swallows click on <a href="#">; touchstart plus preventDefault on click keeps it responsive
+            toggleLink.ontouchstart = (e) => {
+                e.preventDefault();
+                setLoginMode(loginMode === 'token' ? 'email' : 'token');
+            };
         }
 
         function setLoginMode(mode) {
@@ -959,14 +971,14 @@
                 toggleLink.innerText = t('to_token');
                 loginTitle.innerText = t('login_title_pw');
                 loginSubtitle.innerText = t('login_sub_pw');
-                passwordField.focus();
+                requestAnimationFrame(() => passwordField.focus());
             } else {
                 tokenContainer.style.display = 'flex';
                 emailContainer.style.display = 'none';
                 toggleLink.innerText = t('to_pw');
                 loginTitle.innerText = t('login_title_token');
                 loginSubtitle.innerText = t('login_sub_token');
-                tokenField.focus();
+                requestAnimationFrame(() => tokenField.focus());
             }
         }
 
@@ -1044,11 +1056,14 @@
             passwordField.value = '';
             tokenField.style.borderColor = 'var(--danger-color)';
             loginModal.style.display = 'flex';
-            
+
+            // Re-bind controls because this overlay may appear after startService() already ran
+            bindLoginEvents();
+
             if (loginMode === 'email') {
-                passwordField.focus();
+                setLoginMode('email');
             } else {
-                tokenField.focus();
+                setLoginMode('token');
             }
         }
 

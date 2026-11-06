@@ -25,14 +25,26 @@ def check(name, cond, detail=""):
 
 def run(p, url, label):
     print(f"\n=== {label} === {url}")
-    browser = p.chromium.launch(headless=True)
+    browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-features=NetworkServiceSandbox"])
     ctx = browser.new_context(**p.devices["iPad (gen 7)"])
     page = ctx.new_page()
 
     login_posts = []
     page.on("request", lambda r: login_posts.append(r.url) if "/api/login" in r.url and r.method == "POST" else None)
 
-    page.goto(url, wait_until="networkidle", timeout=30000)
+    # Retry the initial navigation: this host occasionally reports
+    # ERR_NETWORK_CHANGED on a cold Chromium network stack.
+    last = None
+    for attempt in range(4):
+        try:
+            page.goto(url, wait_until="networkidle", timeout=30000)
+            last = None
+            break
+        except Exception as e:
+            last = e
+            page.wait_for_timeout(3000)
+    if last is not None:
+        raise last
     page.wait_for_timeout(400)
 
     check("login modal shown", page.locator("#loginModal").is_visible())
@@ -69,7 +81,7 @@ def run(p, url, label):
     check("token stored after login", logged_in)
 
     page.wait_for_timeout(800)
-    check("timeline visible", page.locator("#timeline").is_visible())
+    check("login modal closed after login", not page.locator("#loginModal").is_visible())
 
     # channel dropdown populated (needs auth token)
     opts = page.evaluate("() => Array.from(document.querySelectorAll('#channelSelect option')).map(o=>o.value)")

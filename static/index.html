@@ -952,6 +952,16 @@
             del(k) { try { localStorage.removeItem(k); } catch (e) {} }
         };
 
+        // The login key is scrubbed from the address bar after it is read (see
+        // initAuth), so remember it for the rest of the tab's life. sessionStorage
+        // is per-tab and dies with the tab: it does not pollute browser history,
+        // autocomplete or bookmarks the way a ?key= URL does.
+        const sessionStore = {
+            get(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } },
+            set(k, v) { try { sessionStorage.setItem(k, v); } catch (e) {} },
+            del(k) { try { sessionStorage.removeItem(k); } catch (e) {} }
+        };
+
         function showRuntimeError(msg) {
             try {
                 const el = document.getElementById('errorLog');
@@ -1008,7 +1018,6 @@
                 verifying: 'Verifying...', verify_failed: 'Verification failed',
                 no_token: 'No access token provided',
                 login_failed: 'Login failed — check the password and URL key',
-                need_key: 'Password login needs ?key= in the URL',
                 invalid_token: 'Invalid access token',
                 short_looks_like_pw: 'This looks like a password. Use the ?key= link to log in with password.',
                 sync_fail: 'Sync failure', last_sync: 'Last sync', offline: 'Offline / connection timeout',
@@ -1036,7 +1045,6 @@
                 verifying: '正在验证...', verify_failed: '验证失败',
                 no_token: '未提供安全 Token',
                 login_failed: '登录验证失败，请检查密码及 URL 参数',
-                need_key: '密码登录需要在 URL 里带 ?key= 参数',
                 invalid_token: '安全 Token 无效',
                 short_looks_like_pw: '这看起来像是密码。请使用带 ?key= 的链接进行密码登录。',
                 sync_fail: '同步故障', last_sync: '上次同步', offline: '离线/链接超时',
@@ -1093,16 +1101,34 @@
             // Detect if emergency login key is present in the URL parameter
             const keyParam = urlParams.get('key') || urlParams.get('emergency');
             const toggleContainer = document.getElementById('toggleLoginContainer');
+
+            // Scrub the key from the address bar as soon as it has been read.
+            // The key is the second auth factor; leaving it in the URL means it
+            // lands in browser history, autocomplete suggestions and any bookmark
+            // the user creates — which is exactly how a two-factor design quietly
+            // collapses back to one factor. Nothing later in this page needs it
+            // in the URL: loginKey is already captured in memory.
+            if (keyParam) {
+                try {
+                    const clean = new URL(window.location.href);
+                    clean.searchParams.delete('key');
+                    clean.searchParams.delete('emergency');
+                    window.history.replaceState({}, document.title, clean.pathname + clean.search + clean.hash);
+                } catch (e) {}
+            }
             
             if (keyParam) {
-                // Strip trailing slashes that may be appended by copy/paste or the browser
-                loginKey = keyParam.trim().replace(/\/+$/g, '');
-                // Reveal the email/password switch link
-                toggleContainer.style.display = 'block';
+                // Normalise: the key is typed by hand, so tolerate case and a
+                // trailing slash picked up from copy/paste. The server lowercases
+                // too, so this costs no entropy worth counting.
+                loginKey = keyParam.trim().replace(/\/+$/g, '').toLowerCase();
+                sessionStore.set('ics_key', loginKey);
+            } else {
+                // Reload without the query string: reuse the key captured earlier
+                // in this tab instead of forcing the user to retype it.
+                const remembered = sessionStore.get('ics_key');
+                if (remembered) loginKey = remembered;
             }
-
-            // Only switch to email login directly if the key parameter is valid in URL
-            const showEmailLogin = (keyParam !== null) && (urlParams.get('login') === '1' || urlParams.get('emergency') !== null);
 
             // 2. Load token from localStorage
             token = safeStore.get('ics_token');
@@ -1111,19 +1137,12 @@
                 // If not authenticated, show password overlay modal
                 loginModal.style.display = 'flex';
                 bindLoginEvents();
-
-                // If the URL carries an emergency key, default to password login
-                // (the key is only useful for password mode; user can still switch back to token)
-                if (showEmailLogin || keyParam) {
-                    setLoginMode('email');
-                } else {
-                    setLoginMode('token');
-                }
-
-                // No key in URL means password login is impossible; hide the confusing toggle
-                if (!loginKey) {
-                    toggleContainer.style.display = 'none';
-                }
+                // loginKey is populated either from ?key= or from sessionStorage,
+                // so use it (not keyParam) to decide the starting mode — otherwise
+                // a reload drops the user back into token mode after we scrubbed
+                // the query string.
+                setLoginMode(loginKey ? 'email' : 'token');
+                toggleContainer.style.display = 'block';
             } else {
                 startService();
             }
@@ -1193,10 +1212,6 @@
 
         window.icsToggleMode = function() {
             clientLog('btn toggle click');
-            if (loginMode === 'token' && !loginKey) {
-                showLoginError(t('need_key'));
-                return false;
-            }
             clearLoginError();
             setLoginMode(loginMode === 'token' ? 'email' : 'token');
             return false;
@@ -1355,6 +1370,7 @@
                     const data = await response.json();
                     if (data.status === 'success' && data.token) {
                         safeStore.set('ics_token', data.token);
+                        sessionStore.del('ics_key'); // no longer needed once inside
                         token = data.token;
                         loginModal.style.display = 'none';
                         startService();

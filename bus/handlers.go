@@ -435,9 +435,27 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Two independent factors, deliberately both weak individually so they stay
+	// typeable on a fresh device from memory:
+	//
+	//   dimension 1 = you know the URL shape  (?key=…)
+	//   dimension 2 = you know the password
+	//
+	// An attacker guessing blind must match BOTH, so the search space is the
+	// product: 5 lowercase letters + 6 digits ≈ 1.2e13 combinations, which at the
+	// effective rate (edge limit 3 req / 10 s ≈ 26k/day) is ~6e5 years. Each
+	// factor alone would be far too weak; together they are not.
+	//
+	// The key is normalised (trim + lowercase) because it is typed by hand on a
+	// phone keyboard — being unforgiving about case is a usability bug, not a
+	// security feature, and costs no entropy worth counting.
+	//
 	// Constant-time comparisons: never leak how much of the secret matched.
 	passwordOK := subtle.ConstantTimeCompare([]byte(req.Password), []byte(config.Password)) == 1
-	keyOK := subtle.ConstantTimeCompare([]byte(req.Key), []byte(config.LoginKey)) == 1
+	keyOK := subtle.ConstantTimeCompare(
+		[]byte(strings.ToLower(strings.TrimSpace(req.Key))),
+		[]byte(strings.ToLower(strings.TrimSpace(config.LoginKey))),
+	) == 1
 
 	now := time.Now()
 	if !passwordOK || !keyOK {

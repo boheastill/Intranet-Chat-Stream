@@ -25,6 +25,16 @@ import (
 const (
 	chunkRequestCap = 16 << 20       // hard cap on any single data request body
 	chunkIdleExpiry = 24 * time.Hour // idle sessions/temps are swept
+
+)
+
+// In-flight uploads live in files/.chunks, which the rolling storage quota
+// deliberately ignores (so a big upload cannot roll-delete the store mid
+// transfer). That makes them unbounded unless capped here. Variables, not
+// constants, so tests can shrink them.
+var (
+	maxConcurrentUploads       = 8                  // simultaneous upload sessions
+	maxPendingBytes      int64 = 1024 * 1024 * 1024 // total bytes declared across them (1 GiB)
 )
 
 var chunkIDRe = regexp.MustCompile(`^[0-9a-f]{32}$`)
@@ -123,9 +133,31 @@ func handleChunkInit(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	sess.LastActive = now
 
+	// Bound the number of concurrent sessions AND the total bytes they have
+	// declared. Without this an attacker (or a buggy client) can open unlimited
+	// 500 MB slots: the rolling quota in cleanupOldFiles deliberately ignores
+	// .chunks, so those temps would fill the disk unchecked.
 	uploadsMu.Lock()
-	uploads[id] = sess
+	var declared int64
+	for _, s := range uploads {
+		declared += s.Size
+	}
+	tooMany := len(uploads) >= maxConcurrentUploads
+	tooBig := declared+req.Size > maxPendingBytes
+	if !tooMany && !tooBig {
+		uploads[id] = sess
+	}
 	uploadsMu.Unlock()
+
+	if tooMany || tooBig {
+		os.RemoveAll(dir)
+		reason := "too many concurrent uploads"
+		if tooBig {
+			reason = "pending upload bytes limit reached"
+		}
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": reason})
+		return
+	}
 
 	log.Printf("[%s] CHUNK INIT: id=%s, name=%s, size=%s", getClientIP(r), id, sess.Filename, formatSize(req.Size))
 	writeJSON(w, http.StatusCreated, map[string]string{"upload_id": id})

@@ -913,9 +913,6 @@
             window.location.href = url.toString();
         });
 
-        // Initialize Authentication flow
-        initAuth();
-
         // ---- i18n ----
         const I18N = {
             en: {
@@ -1886,6 +1883,9 @@
         document.addEventListener('click', () => {
             document.querySelectorAll('.message-card').forEach(c => c.classList.remove('active'));
         });
+
+        // Initialize Authentication flow after all helpers and i18n are defined
+        initAuth();
     </script>
 </body>
 </html>

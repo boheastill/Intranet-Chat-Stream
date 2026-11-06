@@ -10,12 +10,22 @@ res=[]
 def ck(n,c,d=""):
     res.append((n,bool(c),d)); print(("  PASS  " if c else "  FAIL  ")+n+(f"  -> {d}" if d and not c else ""))
 
+def login_with_retry(pg, password, tries=6):
+    """Click the login button, waiting out 429s from the edge limit / backoff."""
+    for i in range(tries):
+        pg.click("#btnLogin")
+        pg.wait_for_timeout(1500)
+        if pg.evaluate("() => !!localStorage.getItem('ics_token')"):
+            return True
+        pg.wait_for_timeout(4000)
+    return False
+
 with sync_playwright() as p:
     b=p.webkit.launch(headless=True)
     ctx=b.new_context(**p.devices["iPad (gen 7)"]); pg=ctx.new_page()
     errs=[]; pg.on("pageerror", lambda e: errs.append(str(e)[:200]))
     pg.goto(f"{BASE}/?key={KEY}", wait_until="load"); pg.wait_for_timeout(400)
-    pg.fill("#passwordField", PW); pg.click("#btnLogin"); pg.wait_for_timeout(1500)
+    pg.fill("#passwordField", PW); login_with_retry(pg, PW)
 
     print("\n### AC. very long unbroken string must not blow out the layout")
     pg.fill("#textInput", "A"*400)

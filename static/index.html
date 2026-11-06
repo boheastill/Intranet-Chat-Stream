@@ -568,6 +568,20 @@
             background: linear-gradient(135deg, #1e6b47 0%, #366294 100%);
         }
 
+        /* The show-password checkbox was a 12x12 hit target. Keep the glyph small
+           but give the control a real tappable box. */
+        .show-toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35rem;
+            min-height: 44px;
+            padding: 0 0.4rem;
+            cursor: pointer;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
         .link-btn {
             background: none;
             border: none;
@@ -624,6 +638,7 @@
            14-30px tall, which made them genuinely hard to hit on a tablet. */
         #langToggle,
         #btnLogoutHeader,
+        #toggleLoginMode,
         #pushForm button[type=submit] {
             min-width: 44px;
             min-height: 44px;
@@ -886,8 +901,8 @@
             <!-- Token input view -->
             <div id="tokenInputContainer" style="width: 100%; display: flex; flex-direction: column; gap: 0.25rem;">
                 <input type="password" id="tokenField" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="text" class="secure-input" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 1rem; border-radius: 0.75rem; font-size: 1.1rem; text-align: center; outline: none; font-family: monospace; transition: border-color 0.2s;" placeholder="••••••••••••••••">
-                <label style="font-size: 0.75rem; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; gap: 0.3rem; cursor: pointer;">
-                    <input type="checkbox" onchange="window.icsToggleEye('token');"> Show token
+                <label class="show-toggle">
+                    <input type="checkbox" onchange="window.icsToggleEye('token');"> <span>Show token</span>
                 </label>
                 <div style="font-size: 0.75rem; color: var(--text-secondary);">Mode: <span style="color: var(--success-color); font-weight: 600;">Access Token</span></div>
             </div>
@@ -895,8 +910,8 @@
             <!-- Emergency Password input view -->
             <div id="emailInputContainer" style="width: 100%; display: none; flex-direction: column; gap: 0.25rem;">
                 <input type="password" id="passwordField" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="numeric" class="secure-input" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 1rem; border-radius: 0.75rem; font-size: 1.1rem; text-align: center; outline: none; transition: border-color 0.2s;" placeholder="Enter fallback password" data-i18n-ph="pw_ph">
-                <label style="font-size: 0.75rem; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; gap: 0.3rem; cursor: pointer;">
-                    <input type="checkbox" onchange="window.icsToggleEye('password');"> Show password
+                <label class="show-toggle">
+                    <input type="checkbox" onchange="window.icsToggleEye('password');"> <span>Show password</span>
                 </label>
                 <div style="font-size: 0.75rem; color: var(--text-secondary);">Mode: <span style="color: var(--warning-color); font-weight: 600;">Fallback Password</span></div>
             </div>

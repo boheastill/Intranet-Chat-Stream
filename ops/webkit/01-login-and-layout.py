@@ -13,6 +13,16 @@ def check(name, cond, detail=""):
     results.append((name, bool(cond), detail))
     print(("  PASS  " if cond else "  FAIL  ") + name + (f"  -> {detail}" if detail and not cond else ""))
 
+def login_with_retry(pg, password, tries=6):
+    """Click the login button, waiting out 429s from the edge limit / backoff."""
+    for i in range(tries):
+        pg.click("#btnLogin")
+        pg.wait_for_timeout(1500)
+        if pg.evaluate("() => !!localStorage.getItem('ics_token')"):
+            return True
+        pg.wait_for_timeout(4000)
+    return False
+
 def newpage(p, dev="iPad (gen 7)"):
     b = p.webkit.launch(headless=True)
     ctx = b.new_context(**p.devices[dev])

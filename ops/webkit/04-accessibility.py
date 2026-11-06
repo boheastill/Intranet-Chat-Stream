@@ -10,6 +10,16 @@ res=[]
 def ck(n,c,d=""):
     res.append((n,bool(c),d)); print(("  PASS  " if c else "  FAIL  ")+n+(f"  -> {d}" if d and not c else ""))
 
+def login_with_retry(pg, password, tries=6):
+    """Click the login button, waiting out 429s from the edge limit / backoff."""
+    for i in range(tries):
+        pg.click("#btnLogin")
+        pg.wait_for_timeout(1500)
+        if pg.evaluate("() => !!localStorage.getItem('ics_token')"):
+            return True
+        pg.wait_for_timeout(4000)
+    return False
+
 with sync_playwright() as p:
     b=p.webkit.launch(headless=True)
 

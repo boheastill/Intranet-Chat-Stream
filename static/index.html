@@ -570,8 +570,8 @@
             text-security: disc;
         }
         .secure-input.secure-plain {
-            -webkit-text-security: none;
-            text-security: none;
+            -webkit-text-security: none !important;
+            text-security: none !important;
         }
 
         .probe-btn {
@@ -802,7 +802,7 @@
     <!-- Security Authentication Modal Overlay -->
     <div id="loginModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(11, 13, 17, 0.96); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); display: none; align-items: center; justify-content: center; z-index: 1000;">
         <div style="background: var(--surface-color); border: 1px solid var(--border-color); border-top: 4px solid var(--danger-color); border-radius: 1.5rem; padding: 2.5rem; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 15px 35px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 1rem; position: relative;">
-            <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #10b981 0%, #3b82f6 100%); color: white; font-size: 0.65rem; font-weight: 700; padding: 0.2rem 0.7rem; border-radius: 1rem; letter-spacing: 0.5px; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);">LOGIN FIX V10</div>
+            <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #10b981 0%, #3b82f6 100%); color: white; font-size: 0.65rem; font-weight: 700; padding: 0.2rem 0.7rem; border-radius: 1rem; letter-spacing: 0.5px; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);">LOGIN FIX V11</div>
             <div class="logo-icon" style="margin: 0 auto; width: 3.5rem; height: 3.5rem; font-size: 1.6rem; border-radius: 0.8rem;">C</div>
             <h2 id="loginTitle" style="font-size: 1.4rem; font-weight: 600; background: linear-gradient(to right, #ffffff, var(--text-secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;" data-i18n="login_title_token">Authentication required</h2>
             <p id="loginSubtitle" style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.4;" data-i18n="login_sub_token">Enter your access token or fallback password</p>
@@ -1012,7 +1012,8 @@
             const toggleContainer = document.getElementById('toggleLoginContainer');
             
             if (keyParam) {
-                loginKey = keyParam.trim();
+                // Strip trailing slashes that may be appended by copy/paste or the browser
+                loginKey = keyParam.trim().replace(/\/+$/g, '');
                 // Reveal the email/password switch link
                 toggleContainer.style.display = 'block';
             }

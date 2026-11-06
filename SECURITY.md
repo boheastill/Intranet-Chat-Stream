@@ -69,3 +69,28 @@ Be honest about these before storing anything sensitive:
 
 This is a personal project with no bug bounty. If you find something, open an
 issue without exploit details, or contact the maintainer directly.
+
+## Deployment hardening (Cloudflare)
+
+The zone `bohea.us` fronts ICS with a Cloudflare Tunnel, so no origin IP is
+published. These settings are part of the security model and should be verified
+after any zone change:
+
+| setting | required value | why |
+|---|---|---|
+| SSL mode | `strict` | tunnel terminates TLS; never fall back to flexible |
+| Always Use HTTPS | `on` | otherwise `http://` serves the app and leaks the token/password in cleartext |
+| Min TLS version | `1.2` | drop obsolete protocols |
+| Security level | `medium`+ | managed WAF rules stay active |
+| Rate limit rule | 3 requests / 10 s per IP on `/api/login` | free-plan limits: one rule, 10 s period |
+
+Check them with:
+
+```bash
+curl -s -H "Authorization: Bearer $CF_TOKEN" \
+  "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/settings/always_use_https"
+```
+
+**Note:** `web.bohea.us` is additionally behind Cloudflare Access (Zero Trust).
+`flow.bohea.us` deliberately is *not* — the app has its own token auth, and an
+Access redirect would break the non-browser clients (MCP `ics-core`, curl).

@@ -337,12 +337,18 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// ?download=1 forces attachment (trigger browser save dialog); otherwise inline
+	// ?download=1 forces attachment (trigger browser save dialog); otherwise inline.
+	//
+	// SECURITY: everything served from /api/download/ must be forced to
+	// application/octet-stream. This route is same-origin with the app, so an
+	// uploaded .html/.svg would otherwise execute script *with the app's origin*
+	// and could read the auth token out of localStorage. We also attach a
+	// sandboxing CSP for the case where a client still renders it inline.
 	disposition := "inline"
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
 	if r.URL.Query().Get("download") == "1" {
 		disposition = "attachment"
-		// Force binary Content-Type so mobile browsers don't append .txt
-		w.Header().Set("Content-Type", "application/octet-stream")
 	}
 	w.Header().Set("Content-Disposition", fmt.Sprintf("%s; filename=%q", disposition, origFilename))
 	// Enable cache control for immutable files (our filenames contain epoch timestamp, so they are immutable)

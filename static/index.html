@@ -1519,7 +1519,13 @@
                 
                 // Only show time H:M:S, Hover to view full datetime
                 const timeOnly = msg.time.split(' ')[1] || msg.time;
-                meta.innerHTML = `<span class="bubble-time" title="${msg.time}">${timeOnly}</span>`;
+                // Built as DOM nodes: msg.time is server-formatted today, but never
+                // interpolate remote data into innerHTML when a property assignment works.
+                const timeEl = document.createElement('span');
+                timeEl.className = 'bubble-time';
+                timeEl.title = msg.time;
+                timeEl.textContent = timeOnly;
+                meta.appendChild(timeEl);
                 
                 if (msg.pinned) {
                     meta.innerHTML += `
@@ -1567,10 +1573,19 @@
                             </svg>
                         </div>
                         <div class="file-info">
-                            <a href="${downloadUrl}&download=1" class="file-name" download="${msg.filename}">${msg.filename}</a>
-                            <span class="file-size">${msg.size}</span>
+                            <a class="file-name" download></a>
+                            <span class="file-size"></span>
                         </div>
                     `;
+                    // Assign attacker-controlled strings via properties, never via
+                    // the innerHTML template above — a filename like
+                    // <img src=x onerror=...>.txt would otherwise execute.
+                    const nameEl = fileBox.querySelector('.file-name');
+                    nameEl.href = downloadUrl + '&download=1';
+                    nameEl.download = msg.filename;
+                    nameEl.textContent = msg.filename;
+                    fileBox.querySelector('.file-size').textContent = msg.size;
+
                     bubbleContent.appendChild(fileBox);
 
                     if (isImg) {

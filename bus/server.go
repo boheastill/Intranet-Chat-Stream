@@ -60,7 +60,7 @@ func Run(cfg Config) error {
 	mux.HandleFunc("/api/download/", handleDownload)
 	mux.HandleFunc("/", serveStatic)
 
-	handler := tokenAuthMiddleware(mux, config.Token)
+	handler := securityHeaders(tokenAuthMiddleware(mux, config.Token))
 
 	// Janitor: expire abandoned chunked uploads and their temp files
 	go func() {
@@ -74,6 +74,20 @@ func Run(cfg Config) error {
 	log.Printf("Starting ICS Message Bus locally on %s...", bindAddr)
 	log.Printf("Web UI (logged in): http://%s/?token=%s", bindAddr, config.Token)
 	return http.ListenAndServe(bindAddr, handler)
+}
+
+// securityHeaders sets conservative defaults on every response. The app is a
+// single self-contained page with no external resources, so a strict policy
+// costs nothing and removes whole classes of injection risk.
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+		next.ServeHTTP(w, r)
+	})
 }
 
 // serveStatic serves index.html or other files in the static directory.

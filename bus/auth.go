@@ -3,6 +3,7 @@ package bus
 import (
 	"crypto/subtle"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -59,9 +60,11 @@ func getClientIP(r *http.Request) string {
 		parts := strings.Split(xff, ",")
 		return strings.TrimSpace(parts[0])
 	}
-	parts := strings.Split(r.RemoteAddr, ":")
-	if len(parts) > 0 {
-		return parts[0]
+	// net.SplitHostPort handles IPv6 literals ("[2406:da18::1]:443"); the old
+	// strings.Split(":") approach returned just "2406" for those, which made every
+	// IPv6 client share one backoff bucket.
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
 	}
 	return r.RemoteAddr
 }

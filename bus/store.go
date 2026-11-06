@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,6 +16,10 @@ import (
 
 // maxDirSize is the rolling storage quota for ./files (overridable via env).
 var maxDirSize int64 = 2 * 1024 * 1024 * 1024 // 2 GB
+
+// channelNameRe bounds channel names to a safe, non-colliding character set.
+// ".chunks" is reserved for in-flight chunked uploads and must stay unreachable.
+var channelNameRe = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
 
 // Message represents the JSON structure of a file/text bubble in the timeline.
 type Message struct {
@@ -37,13 +42,18 @@ type ActionPayload struct {
 // getChannelDir extracts the channel query param and returns channel name and safe target directory.
 func getChannelDir(r *http.Request) (string, string) {
 	channel := strings.TrimSpace(r.URL.Query().Get("channel"))
-	if channel != "" {
-		channel = strings.ReplaceAll(channel, "/", "")
-		channel = strings.ReplaceAll(channel, "\\", "")
-		channel = strings.ReplaceAll(channel, "..", "")
-		return channel, filepath.Join(filesDir, channel)
+	if channel == "" {
+		return "", filesDir
 	}
-	return "", filesDir
+	// Whitelist instead of blacklist: deleting characters made distinct inputs
+	// collapse onto one directory ("a/b" and "ab" both became "ab"), so a typo
+	// could silently read someone else's channel. Reject anything unexpected.
+	// The character whitelist alone still admits ".." and ".", which filepath.Join
+	// would resolve outside files/ — reject any name made only of dots too.
+	if !channelNameRe.MatchString(channel) || strings.Trim(channel, ".") == "" || channel == ".chunks" {
+		return "", filesDir
+	}
+	return channel, filepath.Join(filesDir, channel)
 }
 
 // getSafeFilePath validates and returns a clean, safe path to a file inside files/.
@@ -63,7 +73,7 @@ func getSafeFilePath(id string) (string, error) {
 		return "", err
 	}
 
-	if !strings.HasPrefix(absSafePath, absFilesDir) {
+	if absSafePath != absFilesDir && !strings.HasPrefix(absSafePath, absFilesDir+string(os.PathSeparator)) {
 		return "", fmt.Errorf("path traversal detected")
 	}
 

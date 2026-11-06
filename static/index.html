@@ -563,17 +563,6 @@
             opacity: 1;
         }
 
-        /* Use WebKit text-security instead of type=password to avoid iOS
-           password-manager/key-icon/auto-fill stealing focus on every keystroke */
-        .secure-input.secure-mask {
-            -webkit-text-security: disc;
-            text-security: disc;
-        }
-        .secure-input.secure-plain {
-            -webkit-text-security: none !important;
-            text-security: none !important;
-        }
-
         .probe-btn {
             background: rgba(255,255,255,0.05);
             border: 1px solid var(--border-color);
@@ -714,12 +703,38 @@
             </select>
             <script>
         // channel 下拉框：从 /api/channels 热同步（30s / 回到前台时），新增 channel 自动出现
+        // /api/channels 受 token 保护，必须带 X-Auth-Token，否则永远 401（旧版就是漏了它，
+        // 所以下拉框永远只有 "General"）。
         (function () {
             const sel = document.getElementById('channelSelect');
             const seen = new Set(Array.from(sel.options).map(o => o.value));
-            const refetch = () => fetch('/api/channels').then(r => r.json()).then(cs => {
-                cs.forEach(c => { if (!seen.has(c)) { seen.add(c); const o = document.createElement('option'); o.value = c; o.textContent = c || 'General (default)'; sel.appendChild(o); } });
-            }).catch(() => {});
+            const authToken = () => { try { return localStorage.getItem('ics_token') || ''; } catch (e) { return ''; } };
+
+            function refetch() {
+                const tk = authToken();
+                if (!tk) return Promise.resolve(); // 未登录：静默跳过，登录后由 startService 触发
+                return fetch('/api/channels', { headers: { 'X-Auth-Token': tk } })
+                    .then(r => (r.ok ? r.json() : []))
+                    .then(cs => {
+                        (cs || []).forEach(c => {
+                            if (!seen.has(c)) {
+                                seen.add(c);
+                                const o = document.createElement('option');
+                                o.value = c;
+                                o.textContent = c || 'General (default)';
+                                sel.appendChild(o);
+                            }
+                        });
+                        // 保证 URL 里的 channel 在选项就绪后能被选中
+                        const want = new URLSearchParams(window.location.search).get('channel') || '';
+                        if (want && seen.has(want)) sel.value = want;
+                    })
+                    .catch(() => {});
+            }
+
+            // 暴露给登录成功后的 startService() 调用
+            window.icsRefreshChannels = refetch;
+
             refetch();
             setInterval(refetch, 30000);
             document.addEventListener('visibilitychange', () => { if (!document.hidden) refetch(); });
@@ -802,14 +817,14 @@
     <!-- Security Authentication Modal Overlay -->
     <div id="loginModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(11, 13, 17, 0.96); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); display: none; align-items: center; justify-content: center; z-index: 1000;">
         <div style="background: var(--surface-color); border: 1px solid var(--border-color); border-top: 4px solid var(--danger-color); border-radius: 1.5rem; padding: 2.5rem; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 15px 35px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 1rem; position: relative;">
-            <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #10b981 0%, #3b82f6 100%); color: white; font-size: 0.65rem; font-weight: 700; padding: 0.2rem 0.7rem; border-radius: 1rem; letter-spacing: 0.5px; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);">LOGIN FIX V11</div>
+            <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #10b981 0%, #3b82f6 100%); color: white; font-size: 0.65rem; font-weight: 700; padding: 0.2rem 0.7rem; border-radius: 1rem; letter-spacing: 0.5px; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);">LOGIN FIX V12</div>
             <div class="logo-icon" style="margin: 0 auto; width: 3.5rem; height: 3.5rem; font-size: 1.6rem; border-radius: 0.8rem;">C</div>
-            <h2 id="loginTitle" style="font-size: 1.4rem; font-weight: 600; background: linear-gradient(to right, #ffffff, var(--text-secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;" data-i18n="login_title_token">Authentication required</h2>
-            <p id="loginSubtitle" style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.4;" data-i18n="login_sub_token">Enter your access token or fallback password</p>
+            <h2 id="loginTitle" style="font-size: 1.4rem; font-weight: 600; background: linear-gradient(to right, #ffffff, var(--text-secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Authentication required</h2>
+            <p id="loginSubtitle" style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.4;">Enter your access token or fallback password</p>
 
             <!-- Token input view -->
             <div id="tokenInputContainer" style="width: 100%; display: flex; flex-direction: column; gap: 0.25rem;">
-                <input type="text" id="tokenField" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="text" class="secure-input secure-mask" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 1rem; border-radius: 0.75rem; font-size: 1.1rem; text-align: center; outline: none; font-family: monospace; transition: border-color 0.2s;" placeholder="••••••••••••••••">
+                <input type="password" id="tokenField" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="text" class="secure-input" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 1rem; border-radius: 0.75rem; font-size: 1.1rem; text-align: center; outline: none; font-family: monospace; transition: border-color 0.2s;" placeholder="••••••••••••••••">
                 <label style="font-size: 0.75rem; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; gap: 0.3rem; cursor: pointer;">
                     <input type="checkbox" onchange="window.icsToggleEye('token');"> Show token
                 </label>
@@ -818,7 +833,7 @@
 
             <!-- Emergency Password input view -->
             <div id="emailInputContainer" style="width: 100%; display: none; flex-direction: column; gap: 0.25rem;">
-                <input type="text" id="passwordField" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="numeric" class="secure-input secure-mask" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 1rem; border-radius: 0.75rem; font-size: 1.1rem; text-align: center; outline: none; transition: border-color 0.2s;" placeholder="Enter fallback password" data-i18n-ph="pw_ph">
+                <input type="password" id="passwordField" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="numeric" class="secure-input" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 1rem; border-radius: 0.75rem; font-size: 1.1rem; text-align: center; outline: none; transition: border-color 0.2s;" placeholder="Enter fallback password" data-i18n-ph="pw_ph">
                 <label style="font-size: 0.75rem; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; gap: 0.3rem; cursor: pointer;">
                     <input type="checkbox" onchange="window.icsToggleEye('password');"> Show password
                 </label>
@@ -827,19 +842,19 @@
 
             <div id="loginError" style="display: none; color: var(--danger-color); font-size: 0.85rem; line-height: 1.4; padding: 0.5rem; background: rgba(239, 68, 68, 0.08); border-radius: 0.5rem;"></div>
 
-            <button type="button" id="btnLogin" class="submit-btn" style="width: 100%; justify-content: center; padding: 0.9rem 1rem; font-size: 1rem; border-radius: 0.75rem; min-height: 48px;" data-i18n="login_btn" onclick="window.icsLoginSubmit();" ontouchstart="window.icsLoginSubmit();">Verify &amp; enter</button>
+            <button type="button" id="btnLogin" class="submit-btn" style="width: 100%; justify-content: center; padding: 0.9rem 1rem; font-size: 1rem; border-radius: 0.75rem; min-height: 48px;" data-i18n="login_btn" onclick="window.icsLoginSubmit();">Verify &amp; enter</button>
 
             <div style="margin-top: 0.25rem; display: none;" id="toggleLoginContainer">
-                <button type="button" id="toggleLoginMode" class="link-btn" data-i18n="to_pw" onclick="window.icsToggleMode();" ontouchstart="window.icsToggleMode();">Use fallback password</button>
+                <button type="button" id="toggleLoginMode" class="link-btn" data-i18n="to_pw" onclick="window.icsToggleMode();">Use fallback password</button>
             </div>
 
-            <!-- Diagnostic probes -->
-            <div style="border-top: 1px solid var(--border-color); padding-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;">
+            <!-- Diagnostic probes (only shown with ?debug=1) -->
+            <div id="debugPanel" style="border-top: 1px solid var(--border-color); padding-top: 0.75rem; display: none; flex-direction: column; gap: 0.5rem;">
                 <div style="font-size: 0.7rem; color: var(--text-secondary);">Diagnostic probes</div>
                 <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
-                    <button type="button" class="probe-btn" onclick="window.icsProbe('click');" ontouchstart="window.icsProbe('click');">Test click</button>
-                    <button type="button" class="probe-btn" onclick="window.icsProbe('ping');" ontouchstart="window.icsProbe('ping');">Ping server</button>
-                    <button type="button" class="probe-btn" onclick="window.icsProbe('login');" ontouchstart="window.icsProbe('login');">Send login</button>
+                    <button type="button" class="probe-btn" onclick="window.icsProbe('click');">Test click</button>
+                    <button type="button" class="probe-btn" onclick="window.icsProbe('ping');">Ping server</button>
+                    <button type="button" class="probe-btn" onclick="window.icsProbe('login');">Send login</button>
                 </div>
                 <div id="clientLog" style="display: none; font-size: 0.7rem; color: var(--text-secondary); background: rgba(0,0,0,0.2); padding: 0.4rem; border-radius: 0.4rem; max-height: 120px; overflow-y: auto; text-align: left; font-family: monospace; white-space: pre-wrap;"></div>
                 <div id="envInfo" style="font-size: 0.65rem; color: var(--text-secondary); text-align: left; word-break: break-all;"></div>
@@ -899,6 +914,8 @@
         let pollingInterval = null;
         let loginMode = 'token'; // 'token' or 'email'
         let loginKey = ''; // Holds URL parameter key for emergency login gateway
+        // Diagnostic scaffolding (probe buttons, client log, UA dump) is opt-in.
+        const DEBUG = new URLSearchParams(window.location.search).get('debug') === '1';
         let currentChannel = new URLSearchParams(window.location.search).get('channel') || '';
 
         // Init Channel UI
@@ -988,6 +1005,11 @@
         }
         document.addEventListener('DOMContentLoaded', () => {
             applyI18n();
+            // applyI18n() rewrites #toggleLoginMode from data-i18n; restore the label
+            // that matches the actually-active login mode.
+            if (typeof setLoginMode === 'function' && loginModal.style.display === 'flex') {
+                setLoginMode(loginMode);
+            }
             const lt = document.getElementById('langToggle');
             if (lt) lt.onclick = () => {
                 LANG = (LANG === 'zh') ? 'en' : 'zh';
@@ -1045,17 +1067,21 @@
                 startService();
             }
 
-            // Surface environment info for remote debugging
-            try {
-                const envEl = document.getElementById('envInfo');
-                if (envEl) {
-                    const ua = navigator.userAgent || 'unknown';
-                    const proxyHint = window.location.hostname === '127.0.0.1' || window.location.port === '7895'
-                        ? 'proxy-ish'
-                        : (window.navigator && window.navigator.connection ? 'conn:' + (window.navigator.connection.effectiveType || '?') : 'no-conn-api');
-                    envEl.textContent = 'UA: ' + ua + ' | host: ' + window.location.host + ' | ' + proxyHint;
-                }
-            } catch (e) {}
+            // Surface environment info — only when explicitly debugging (?debug=1)
+            if (DEBUG) {
+                try {
+                    const panel = document.getElementById('debugPanel');
+                    if (panel) panel.style.display = 'flex';
+                    const envEl = document.getElementById('envInfo');
+                    if (envEl) {
+                        const ua = navigator.userAgent || 'unknown';
+                        const conn = navigator.connection
+                            ? 'conn:' + (navigator.connection.effectiveType || '?')
+                            : 'no-conn-api';
+                        envEl.textContent = 'UA: ' + ua + ' | host: ' + window.location.host + ' | ' + conn;
+                    }
+                } catch (e) {}
+            }
         }
 
         function showLoginError(msg) {
@@ -1077,17 +1103,22 @@
         }
 
         function setSecureMasked(field, masked) {
-            field.classList.remove('secure-mask', 'secure-plain');
-            field.classList.add(masked ? 'secure-mask' : 'secure-plain');
+            field.type = masked ? 'password' : 'text';
         }
 
-        // Global handlers wired directly via inline HTML onclick attributes for maximum
-        // compatibility with iPad Chrome/Safari WebKit.
+        // Toggle reveal by switching input type — the only method WebKit honours
+        // for every character (the -webkit-text-security hack only re-renders the
+        // last glyph on iOS, which is why only one digit appeared).
         window.icsToggleEye = function(which) {
             clientLog('eye ' + which);
             const field = which === 'token' ? tokenField : passwordField;
-            const isMasked = field.classList.contains('secure-mask');
-            setSecureMasked(field, !isMasked);
+            const willReveal = field.type === 'password';
+            setSecureMasked(field, !willReveal);
+            try {
+                field.focus({ preventScroll: true });
+                const end = field.value.length;
+                field.setSelectionRange(end, end);
+            } catch (e) {}
             return false;
         };
 
@@ -1281,6 +1312,9 @@
         }
 
         function startService() {
+            // Channels were skipped while logged out — load them now that we hold a token.
+            if (typeof window.icsRefreshChannels === 'function') window.icsRefreshChannels();
+
             // Trigger first immediate fetch
             fetchList();
 

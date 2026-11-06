@@ -522,11 +522,20 @@
 
         .submit-btn:hover {
             box-shadow: 0 4px 15px rgba(46, 139, 87, 0.35);
-            transform: translateY(-1px);
         }
 
         .submit-btn:active {
-            transform: translateY(0);
+            transform: scale(0.98);
+        }
+
+        .submit-btn.tapped {
+            background: linear-gradient(135deg, #1e6b47 0%, #366294 100%);
+        }
+
+        /* iOS Safari: avoid 300ms tap delay and ghost clicks */
+        .submit-btn, #toggleLoginMode {
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
         }
 
         /* Progress Bar Overlay */
@@ -735,7 +744,8 @@
 
     <!-- Security Authentication Modal Overlay -->
     <div id="loginModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(11, 13, 17, 0.96); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); display: none; align-items: center; justify-content: center; z-index: 1000;">
-        <div style="background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 1.5rem; padding: 2.5rem; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 15px 35px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 1.5rem;">
+        <div style="background: var(--surface-color); border: 1px solid var(--border-color); border-top: 4px solid var(--danger-color); border-radius: 1.5rem; padding: 2.5rem; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 15px 35px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 1.5rem; position: relative;">
+            <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--danger-color); color: white; font-size: 0.65rem; font-weight: 700; padding: 0.15rem 0.6rem; border-radius: 1rem; letter-spacing: 0.5px;">LOGIN FIX V3</div>
             <div class="logo-icon" style="margin: 0 auto; width: 3.5rem; height: 3.5rem; font-size: 1.6rem; border-radius: 0.8rem;">C</div>
             <h2 id="loginTitle" style="font-size: 1.4rem; font-weight: 600; background: linear-gradient(to right, #ffffff, var(--text-secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;" data-i18n="login_title_token">Authentication required</h2>
             <p id="loginSubtitle" style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.4;" data-i18n="login_sub_token">Enter your access token or fallback password</p>
@@ -752,7 +762,7 @@
 
             <div id="loginError" style="display: none; color: var(--danger-color); font-size: 0.85rem; line-height: 1.4; padding: 0.5rem; background: rgba(239, 68, 68, 0.08); border-radius: 0.5rem;"></div>
 
-            <button id="btnLogin" class="submit-btn" style="width: 100%; justify-content: center; padding: 0.8rem 1rem; font-size: 0.95rem; border-radius: 0.75rem;" data-i18n="login_btn">Verify &amp; enter</button>
+            <button id="btnLogin" class="submit-btn" style="width: 100%; justify-content: center; padding: 0.9rem 1rem; font-size: 1rem; border-radius: 0.75rem; min-height: 48px;" data-i18n="login_btn">Verify &amp; enter</button>
             
             <div style="margin-top: 0.5rem; display: none;" id="toggleLoginContainer">
                 <a href="#" id="toggleLoginMode" style="display: inline-block; padding: 0.4rem; color: var(--text-secondary); font-size: 0.8rem; text-decoration: underline; cursor: pointer; transition: color 0.2s;" data-i18n="to_pw">Use fallback password</a>
@@ -956,7 +966,19 @@
 
         function bindLoginEvents() {
             // Wire login controls; safe to call repeatedly (e.g. after auth failure)
-            btnLogin.onclick = handleLoginSubmit;
+            // Re-clone button to drop any stale iOS touch state, then re-point the global reference
+            btnLogin.replaceWith(btnLogin.cloneNode(true));
+            btnLogin = document.getElementById('btnLogin');
+            // Use addEventListener for both click and touch to maximize iOS compatibility
+            const onBtnAction = (e) => {
+                if (e) { e.preventDefault(); e.stopPropagation(); }
+                btnLogin.classList.add('tapped');
+                setTimeout(() => btnLogin.classList.remove('tapped'), 150);
+                handleLoginSubmit();
+            };
+            btnLogin.addEventListener('click', onBtnAction);
+            btnLogin.addEventListener('touchend', onBtnAction);
+
             tokenField.onkeydown = e => {
                 if (e.key === 'Enter') handleLoginSubmit();
             };
@@ -965,6 +987,8 @@
             };
 
             const toggleLink = document.getElementById('toggleLoginMode');
+            const newToggle = toggleLink.cloneNode(true);
+            toggleLink.parentNode.replaceChild(newToggle, toggleLink);
             const switchMode = (e) => {
                 if (e) { e.preventDefault(); e.stopPropagation(); }
                 // Password login is only possible when the URL carries a key
@@ -975,12 +999,12 @@
                 clearLoginError();
                 setLoginMode(loginMode === 'token' ? 'email' : 'token');
             };
-            toggleLink.onclick = switchMode;
-            // iOS Safari sometimes swallows click on <a href="#">; touchend is more reliable than touchstart
-            toggleLink.ontouchend = (e) => {
+            newToggle.addEventListener('click', switchMode);
+            newToggle.addEventListener('touchend', (e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 switchMode(e);
-            };
+            });
         }
 
         function setLoginMode(mode) {

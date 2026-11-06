@@ -3,6 +3,8 @@
 #   ./run-all.sh                                   # local test instance
 #   ICS_TEST_URL=https://flow.bohea.us \
 #   ICS_TEST_PASSWORD=<your password> ICS_TEST_KEY=<your key> ./run-all.sh
+#
+# Never commit real credentials here — this repository is public.
 set -u
 cd "$(dirname "$0")"
 fail=0

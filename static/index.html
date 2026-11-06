@@ -532,8 +532,38 @@
             background: linear-gradient(135deg, #1e6b47 0%, #366294 100%);
         }
 
+        .link-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            text-decoration: underline;
+            cursor: pointer;
+            padding: 0.5rem;
+            font-family: inherit;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .eye-toggle {
+            position: absolute;
+            right: 0.6rem;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            font-size: 1.1rem;
+            line-height: 1;
+            cursor: pointer;
+            padding: 0.4rem;
+            opacity: 0.6;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .eye-toggle:active {
+            opacity: 1;
+        }
+
         /* iOS Safari: avoid 300ms tap delay and ghost clicks */
-        .submit-btn, #toggleLoginMode {
+        .submit-btn, .link-btn, .eye-toggle {
             touch-action: manipulation;
             -webkit-tap-highlight-color: transparent;
         }
@@ -744,28 +774,36 @@
 
     <!-- Security Authentication Modal Overlay -->
     <div id="loginModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(11, 13, 17, 0.96); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); display: none; align-items: center; justify-content: center; z-index: 1000;">
-        <div style="background: var(--surface-color); border: 1px solid var(--border-color); border-top: 4px solid var(--danger-color); border-radius: 1.5rem; padding: 2.5rem; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 15px 35px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 1.5rem; position: relative;">
-            <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #ef4444 0%, #f97316 100%); color: white; font-size: 0.65rem; font-weight: 700; padding: 0.2rem 0.7rem; border-radius: 1rem; letter-spacing: 0.5px; box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);">LOGIN FIX V4</div>
+        <div style="background: var(--surface-color); border: 1px solid var(--border-color); border-top: 4px solid var(--danger-color); border-radius: 1.5rem; padding: 2.5rem; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 15px 35px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 1.25rem; position: relative;">
+            <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); color: white; font-size: 0.65rem; font-weight: 700; padding: 0.2rem 0.7rem; border-radius: 1rem; letter-spacing: 0.5px; box-shadow: 0 2px 8px rgba(139, 92, 246, 0.4);">LOGIN FIX V5</div>
             <div class="logo-icon" style="margin: 0 auto; width: 3.5rem; height: 3.5rem; font-size: 1.6rem; border-radius: 0.8rem;">C</div>
             <h2 id="loginTitle" style="font-size: 1.4rem; font-weight: 600; background: linear-gradient(to right, #ffffff, var(--text-secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;" data-i18n="login_title_token">Authentication required</h2>
             <p id="loginSubtitle" style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.4;" data-i18n="login_sub_token">Enter your access token or fallback password</p>
-            
+
             <!-- Token input view -->
-            <div id="tokenInputContainer" style="width: 100%; display: flex; flex-direction: column; gap: 1rem;">
-                <input type="password" id="tokenField" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 1rem; border-radius: 0.75rem; font-size: 1.1rem; text-align: center; outline: none; font-family: monospace; transition: border-color 0.2s;" placeholder="••••••••••••••••">
+            <div id="tokenInputContainer" style="width: 100%; display: flex; flex-direction: column; gap: 0.5rem;">
+                <div style="position: relative; width: 100%;">
+                    <input type="password" id="tokenField" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 2.8rem 0.8rem 1rem; border-radius: 0.75rem; font-size: 1.1rem; text-align: center; outline: none; font-family: monospace; transition: border-color 0.2s;" placeholder="••••••••••••••••">
+                    <button type="button" id="btnShowToken" class="eye-toggle" aria-label="Show token">👁</button>
+                </div>
+                <div style="font-size: 0.75rem; color: var(--text-secondary);">Mode: <span style="color: var(--success-color); font-weight: 600;">Access Token</span></div>
             </div>
 
             <!-- Emergency Password input view -->
-            <div id="emailInputContainer" style="width: 100%; display: none; flex-direction: column; gap: 1rem;">
-                <input type="password" id="passwordField" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 1rem; border-radius: 0.75rem; font-size: 1.1rem; text-align: center; outline: none; transition: border-color 0.2s;" placeholder="Enter fallback password" data-i18n-ph="pw_ph">
+            <div id="emailInputContainer" style="width: 100%; display: none; flex-direction: column; gap: 0.5rem;">
+                <div style="position: relative; width: 100%;">
+                    <input type="password" id="passwordField" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 2.8rem 0.8rem 1rem; border-radius: 0.75rem; font-size: 1.1rem; text-align: center; outline: none; transition: border-color 0.2s;" placeholder="Enter fallback password" data-i18n-ph="pw_ph">
+                    <button type="button" id="btnShowPassword" class="eye-toggle" aria-label="Show password">👁</button>
+                </div>
+                <div style="font-size: 0.75rem; color: var(--text-secondary);">Mode: <span style="color: var(--warning-color); font-weight: 600;">Fallback Password</span></div>
             </div>
 
             <div id="loginError" style="display: none; color: var(--danger-color); font-size: 0.85rem; line-height: 1.4; padding: 0.5rem; background: rgba(239, 68, 68, 0.08); border-radius: 0.5rem;"></div>
 
             <button id="btnLogin" class="submit-btn" style="width: 100%; justify-content: center; padding: 0.9rem 1rem; font-size: 1rem; border-radius: 0.75rem; min-height: 48px;" data-i18n="login_btn">Verify &amp; enter</button>
-            
-            <div style="margin-top: 0.5rem; display: none;" id="toggleLoginContainer">
-                <a href="#" id="toggleLoginMode" style="display: inline-block; padding: 0.4rem; color: var(--text-secondary); font-size: 0.8rem; text-decoration: underline; cursor: pointer; transition: color 0.2s;" data-i18n="to_pw">Use fallback password</a>
+
+            <div style="margin-top: 0.25rem; display: none;" id="toggleLoginContainer">
+                <button type="button" id="toggleLoginMode" class="link-btn" data-i18n="to_pw">Use fallback password</button>
             </div>
         </div>
     </div>
@@ -964,21 +1002,30 @@
             el.style.display = 'none';
         }
 
+        function setupEyeToggle(btnId, fieldId) {
+            const btn = document.getElementById(btnId);
+            const field = document.getElementById(fieldId);
+            if (!btn || !field) return;
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                const isHidden = field.type === 'password';
+                field.type = isHidden ? 'text' : 'password';
+                btn.textContent = isHidden ? '🙈' : '👁';
+                field.focus();
+            };
+        }
+
         function bindLoginEvents() {
             try {
-                // Wire login controls; safe to call repeatedly (e.g. after auth failure)
-                // Re-clone button to drop any stale iOS touch state, then re-point the global reference
-                btnLogin.replaceWith(btnLogin.cloneNode(true));
-                btnLogin = document.getElementById('btnLogin');
-                // Use addEventListener for both click and touch to maximize iOS compatibility
-                const onBtnAction = (e) => {
-                    if (e) { e.preventDefault(); e.stopPropagation(); }
+                // Simple onclick assignments are the most reliable across iOS Safari versions.
+                // We avoid cloneNode/addEventListener/touchend combinations that have caused silent failures.
+                btnLogin.onclick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     btnLogin.classList.add('tapped');
                     setTimeout(() => btnLogin.classList.remove('tapped'), 150);
                     handleLoginSubmit();
                 };
-                btnLogin.addEventListener('click', onBtnAction);
-                btnLogin.addEventListener('touchend', onBtnAction);
 
                 tokenField.onkeydown = e => {
                     if (e.key === 'Enter') handleLoginSubmit();
@@ -987,12 +1034,13 @@
                     if (e.key === 'Enter') handleLoginSubmit();
                 };
 
+                setupEyeToggle('btnShowToken', 'tokenField');
+                setupEyeToggle('btnShowPassword', 'passwordField');
+
                 const toggleLink = document.getElementById('toggleLoginMode');
-                const newToggle = toggleLink.cloneNode(true);
-                toggleLink.parentNode.replaceChild(newToggle, toggleLink);
-                const switchMode = (e) => {
-                    if (e) { e.preventDefault(); e.stopPropagation(); }
-                    // Password login is only possible when the URL carries a key
+                toggleLink.onclick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     if (loginMode === 'token' && !loginKey) {
                         showLoginError(t('need_key'));
                         return;
@@ -1000,12 +1048,6 @@
                     clearLoginError();
                     setLoginMode(loginMode === 'token' ? 'email' : 'token');
                 };
-                newToggle.addEventListener('click', switchMode);
-                newToggle.addEventListener('touchend', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    switchMode(e);
-                });
             } catch (err) {
                 showLoginError('Event bind failed: ' + err.message);
                 console.error(err);
@@ -1019,11 +1061,17 @@
             const toggleLink = document.getElementById('toggleLoginMode');
             const loginTitle = document.getElementById('loginTitle');
             const loginSubtitle = document.getElementById('loginSubtitle');
+            const btnShowToken = document.getElementById('btnShowToken');
+            const btnShowPassword = document.getElementById('btnShowPassword');
 
             clearLoginError();
-            // Reset error borders
+            // Reset error borders and visibility toggles
             tokenField.style.borderColor = 'var(--border-color)';
             passwordField.style.borderColor = 'var(--border-color)';
+            tokenField.type = 'password';
+            passwordField.type = 'password';
+            if (btnShowToken) btnShowToken.textContent = '👁';
+            if (btnShowPassword) btnShowPassword.textContent = '👁';
 
             if (mode === 'email') {
                 tokenContainer.style.display = 'none';

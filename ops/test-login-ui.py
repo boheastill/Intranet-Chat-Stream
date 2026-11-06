@@ -32,12 +32,17 @@ def run(p, url, label):
     login_posts = []
     page.on("request", lambda r: login_posts.append(r.url) if "/api/login" in r.url and r.method == "POST" else None)
 
-    # Retry the initial navigation: this host occasionally reports
-    # ERR_NETWORK_CHANGED on a cold Chromium network stack.
+    # Retry the initial navigation. This host intermittently raises
+    # ERR_NETWORK_CHANGED on a cold Chromium network stack, and a failed goto can
+    # leave a half-loaded document behind — so verify the app actually rendered
+    # (badge present, login modal shown) rather than trusting goto's return.
     last = None
-    for attempt in range(4):
+    for attempt in range(5):
         try:
-            page.goto(url, wait_until="networkidle", timeout=30000)
+            page.goto(url, wait_until="load", timeout=30000)
+            page.wait_for_selector("#loginModal", state="visible", timeout=15000)
+            if "LOGIN FIX V12" not in page.content():
+                raise RuntimeError("stale document (no V12 badge)")
             last = None
             break
         except Exception as e:
@@ -45,7 +50,7 @@ def run(p, url, label):
             page.wait_for_timeout(3000)
     if last is not None:
         raise last
-    page.wait_for_timeout(400)
+    page.wait_for_timeout(300)
 
     check("login modal shown", page.locator("#loginModal").is_visible())
     check("password mode active", page.locator("#emailInputContainer").is_visible())

@@ -86,6 +86,12 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+		// Cloudflare terminates TLS in front of us and forwards X-Forwarded-Proto.
+		// Without HSTS the browser will happily follow an http:// link and send the
+		// auth token — and the login password — in cleartext over the internet.
+		if r.Header.Get("X-Forwarded-Proto") == "https" {
+			h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
 		next.ServeHTTP(w, r)
 	})
 }

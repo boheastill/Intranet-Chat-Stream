@@ -23,8 +23,8 @@ import (
 )
 
 const (
-	chunkRequestCap = 16 << 20        // hard cap on any single data request body
-	chunkIdleExpiry = 24 * time.Hour  // idle sessions/temps are swept
+	chunkRequestCap = 16 << 20       // hard cap on any single data request body
+	chunkIdleExpiry = 24 * time.Hour // idle sessions/temps are swept
 )
 
 var chunkIDRe = regexp.MustCompile(`^[0-9a-f]{32}$`)

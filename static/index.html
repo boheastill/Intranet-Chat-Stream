@@ -557,13 +557,40 @@
             padding: 0.4rem;
             opacity: 0.6;
             -webkit-tap-highlight-color: transparent;
+            z-index: 2;
         }
         .eye-toggle:active {
             opacity: 1;
         }
 
+        /* Use WebKit text-security instead of type=password to avoid iOS
+           password-manager/key-icon/auto-fill stealing focus on every keystroke */
+        .secure-input.secure-mask {
+            -webkit-text-security: disc;
+            text-security: disc;
+        }
+        .secure-input.secure-plain {
+            -webkit-text-security: none;
+            text-security: none;
+        }
+
+        .probe-btn {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            border-radius: 0.4rem;
+            padding: 0.35rem 0.6rem;
+            font-size: 0.7rem;
+            cursor: pointer;
+            font-family: inherit;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .probe-btn:active {
+            background: rgba(255,255,255,0.1);
+        }
+
         /* iOS Safari: avoid 300ms tap delay and ghost clicks */
-        .submit-btn, .link-btn, .eye-toggle {
+        .submit-btn, .link-btn, .eye-toggle, .probe-btn {
             touch-action: manipulation;
             -webkit-tap-highlight-color: transparent;
         }
@@ -774,8 +801,8 @@
 
     <!-- Security Authentication Modal Overlay -->
     <div id="loginModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(11, 13, 17, 0.96); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); display: none; align-items: center; justify-content: center; z-index: 1000;">
-        <div style="background: var(--surface-color); border: 1px solid var(--border-color); border-top: 4px solid var(--danger-color); border-radius: 1.5rem; padding: 2.5rem; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 15px 35px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 1.25rem; position: relative;">
-            <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); color: white; font-size: 0.65rem; font-weight: 700; padding: 0.2rem 0.7rem; border-radius: 1rem; letter-spacing: 0.5px; box-shadow: 0 2px 8px rgba(139, 92, 246, 0.4);">LOGIN FIX V6</div>
+        <div style="background: var(--surface-color); border: 1px solid var(--border-color); border-top: 4px solid var(--danger-color); border-radius: 1.5rem; padding: 2.5rem; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 15px 35px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 1rem; position: relative;">
+            <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%); color: white; font-size: 0.65rem; font-weight: 700; padding: 0.2rem 0.7rem; border-radius: 1rem; letter-spacing: 0.5px; box-shadow: 0 2px 8px rgba(6, 182, 212, 0.4);">LOGIN FIX V7</div>
             <div class="logo-icon" style="margin: 0 auto; width: 3.5rem; height: 3.5rem; font-size: 1.6rem; border-radius: 0.8rem;">C</div>
             <h2 id="loginTitle" style="font-size: 1.4rem; font-weight: 600; background: linear-gradient(to right, #ffffff, var(--text-secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;" data-i18n="login_title_token">Authentication required</h2>
             <p id="loginSubtitle" style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.4;" data-i18n="login_sub_token">Enter your access token or fallback password</p>
@@ -783,8 +810,8 @@
             <!-- Token input view -->
             <div id="tokenInputContainer" style="width: 100%; display: flex; flex-direction: column; gap: 0.5rem;">
                 <div style="position: relative; width: 100%;">
-                    <input type="password" id="tokenField" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 2.8rem 0.8rem 1rem; border-radius: 0.75rem; font-size: 1.1rem; text-align: center; outline: none; font-family: monospace; transition: border-color 0.2s;" placeholder="••••••••••••••••">
-                    <button type="button" id="btnShowToken" class="eye-toggle" aria-label="Show token">👁</button>
+                    <input type="text" id="tokenField" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="text" class="secure-input secure-mask" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 2.8rem 0.8rem 1rem; border-radius: 0.75rem; font-size: 1.1rem; text-align: center; outline: none; font-family: monospace; transition: border-color 0.2s;" placeholder="••••••••••••••••">
+                    <button type="button" id="btnShowToken" class="eye-toggle" aria-label="Show token" onclick="window.icsToggleEye('token'); return false;">👁</button>
                 </div>
                 <div style="font-size: 0.75rem; color: var(--text-secondary);">Mode: <span style="color: var(--success-color); font-weight: 600;">Access Token</span></div>
             </div>
@@ -792,8 +819,8 @@
             <!-- Emergency Password input view -->
             <div id="emailInputContainer" style="width: 100%; display: none; flex-direction: column; gap: 0.5rem;">
                 <div style="position: relative; width: 100%;">
-                    <input type="password" id="passwordField" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 2.8rem 0.8rem 1rem; border-radius: 0.75rem; font-size: 1.1rem; text-align: center; outline: none; transition: border-color 0.2s;" placeholder="Enter fallback password" data-i18n-ph="pw_ph">
-                    <button type="button" id="btnShowPassword" class="eye-toggle" aria-label="Show password">👁</button>
+                    <input type="text" id="passwordField" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="numeric" class="secure-input secure-mask" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 2.8rem 0.8rem 1rem; border-radius: 0.75rem; font-size: 1.1rem; text-align: center; outline: none; transition: border-color 0.2s;" placeholder="Enter fallback password" data-i18n-ph="pw_ph">
+                    <button type="button" id="btnShowPassword" class="eye-toggle" aria-label="Show password" onclick="window.icsToggleEye('password'); return false;">👁</button>
                 </div>
                 <div style="font-size: 0.75rem; color: var(--text-secondary);">Mode: <span style="color: var(--warning-color); font-weight: 600;">Fallback Password</span></div>
             </div>
@@ -804,6 +831,17 @@
 
             <div style="margin-top: 0.25rem; display: none;" id="toggleLoginContainer">
                 <button type="button" id="toggleLoginMode" class="link-btn" data-i18n="to_pw" onclick="window.icsToggleMode(); return false;">Use fallback password</button>
+            </div>
+
+            <!-- Diagnostic probes -->
+            <div style="border-top: 1px solid var(--border-color); padding-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                <div style="font-size: 0.7rem; color: var(--text-secondary);">Diagnostic probes</div>
+                <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
+                    <button type="button" class="probe-btn" onclick="window.icsProbe('click'); return false;">Test click</button>
+                    <button type="button" class="probe-btn" onclick="window.icsProbe('ping'); return false;">Ping server</button>
+                    <button type="button" class="probe-btn" onclick="window.icsProbe('login'); return false;">Send login</button>
+                </div>
+                <div id="clientLog" style="display: none; font-size: 0.7rem; color: var(--text-secondary); background: rgba(0,0,0,0.2); padding: 0.4rem; border-radius: 0.4rem; max-height: 120px; overflow-y: auto; text-align: left; font-family: monospace; white-space: pre-wrap;"></div>
             </div>
         </div>
     </div>
@@ -1002,30 +1040,40 @@
             el.style.display = 'none';
         }
 
-        function setupEyeToggle(btnId, fieldId) {
-            const btn = document.getElementById(btnId);
-            const field = document.getElementById(fieldId);
-            if (!btn || !field) return;
-            btn.onclick = (e) => {
-                e.stopPropagation();
-                const isHidden = field.type === 'password';
-                field.type = isHidden ? 'text' : 'password';
-                btn.textContent = isHidden ? '🙈' : '👁';
-                field.focus();
-            };
+        function clientLog(msg) {
+            const el = document.getElementById('clientLog');
+            el.style.display = 'block';
+            const line = new Date().toLocaleTimeString() + ' ' + msg;
+            el.textContent = line + '\n' + el.textContent;
+        }
+
+        function setSecureMasked(field, masked) {
+            field.classList.remove('secure-mask', 'secure-plain');
+            field.classList.add(masked ? 'secure-mask' : 'secure-plain');
         }
 
         // Global handlers wired directly via inline HTML onclick attributes for maximum
-        // compatibility with iPad Safari and other strict WebKit configurations.
+        // compatibility with iPad Chrome/Safari WebKit.
+        window.icsToggleEye = function(which) {
+            clientLog('eye ' + which);
+            const field = which === 'token' ? tokenField : passwordField;
+            const btn = document.getElementById(which === 'token' ? 'btnShowToken' : 'btnShowPassword');
+            const isMasked = field.classList.contains('secure-mask');
+            setSecureMasked(field, !isMasked);
+            btn.textContent = isMasked ? '🙈' : '👁';
+            return false;
+        };
+
         window.icsLoginSubmit = function() {
-            console.log('[ICS] icsLoginSubmit called');
+            clientLog('btn verify click');
             btnLogin.classList.add('tapped');
             setTimeout(() => btnLogin.classList.remove('tapped'), 150);
             handleLoginSubmit();
             return false;
         };
+
         window.icsToggleMode = function() {
-            console.log('[ICS] icsToggleMode called');
+            clientLog('btn toggle click');
             if (loginMode === 'token' && !loginKey) {
                 showLoginError(t('need_key'));
                 return false;
@@ -1033,6 +1081,40 @@
             clearLoginError();
             setLoginMode(loginMode === 'token' ? 'email' : 'token');
             return false;
+        };
+
+        window.icsProbe = async function(kind) {
+            clientLog('probe ' + kind);
+            if (kind === 'click') {
+                clientLog('probe click OK');
+                return false;
+            }
+            if (kind === 'ping') {
+                try {
+                    const r = await fetch('/api/list', { headers: { 'X-Auth-Token': 'probe' } });
+                    clientLog('probe ping status ' + r.status);
+                } catch (e) {
+                    clientLog('probe ping error: ' + e.message);
+                }
+                return false;
+            }
+            if (kind === 'login') {
+                const field = loginMode === 'token' ? tokenField : passwordField;
+                const value = field.value.trim();
+                try {
+                    const r = await fetch('/api/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ password: value, key: loginKey })
+                    });
+                    clientLog('probe login status ' + r.status);
+                    const txt = await r.text();
+                    clientLog('probe login body ' + txt.slice(0, 80));
+                } catch (e) {
+                    clientLog('probe login error: ' + e.message);
+                }
+                return false;
+            }
         };
 
         function bindLoginEvents() {
@@ -1043,9 +1125,6 @@
                 passwordField.onkeydown = e => {
                     if (e.key === 'Enter') handleLoginSubmit();
                 };
-
-                setupEyeToggle('btnShowToken', 'tokenField');
-                setupEyeToggle('btnShowPassword', 'passwordField');
             } catch (err) {
                 showLoginError('Event bind failed: ' + err.message);
                 console.error(err);
@@ -1066,8 +1145,8 @@
             // Reset error borders and visibility toggles
             tokenField.style.borderColor = 'var(--border-color)';
             passwordField.style.borderColor = 'var(--border-color)';
-            tokenField.type = 'password';
-            passwordField.type = 'password';
+            setSecureMasked(tokenField, true);
+            setSecureMasked(passwordField, true);
             if (btnShowToken) btnShowToken.textContent = '👁';
             if (btnShowPassword) btnShowPassword.textContent = '👁';
 
@@ -1077,19 +1156,17 @@
                 toggleLink.innerText = t('to_token');
                 loginTitle.innerText = t('login_title_pw');
                 loginSubtitle.innerText = t('login_sub_pw');
-                requestAnimationFrame(() => passwordField.focus());
             } else {
                 tokenContainer.style.display = 'flex';
                 emailContainer.style.display = 'none';
                 toggleLink.innerText = t('to_pw');
                 loginTitle.innerText = t('login_title_token');
                 loginSubtitle.innerText = t('login_sub_token');
-                requestAnimationFrame(() => tokenField.focus());
             }
         }
 
         async function handleLoginSubmit() {
-            console.log('[ICS] handleLoginSubmit start, mode=' + loginMode);
+            clientLog('submit start mode=' + loginMode);
             clearLoginError();
             if (loginMode === 'token') {
                 const entered = tokenField.value.trim();
@@ -1107,12 +1184,14 @@
 
                 btnLogin.disabled = true;
                 btnLogin.innerText = t('verifying');
+                clientLog('token fetch start');
 
                 try {
                     // Verify the token before hiding the modal so the user sees clear feedback
                     const response = await fetch(currentChannel ? `/api/list?channel=${currentChannel}` : '/api/list', {
                         headers: { 'X-Auth-Token': entered }
                     });
+                    clientLog('token status ' + response.status);
                     if (response.status === 401 || response.status === 403) {
                         throw new Error(t('invalid_token'));
                     }
@@ -1123,6 +1202,7 @@
                     loginModal.style.display = 'none';
                     startService();
                 } catch (err) {
+                    clientLog('token error: ' + err.message);
                     showLoginError(err.message || t('invalid_token'));
                     tokenField.style.borderColor = 'var(--danger-color)';
                 } finally {
@@ -1139,6 +1219,7 @@
                 passwordField.style.borderColor = 'var(--border-color)';
                 btnLogin.disabled = true;
                 btnLogin.innerText = t('verifying');
+                clientLog('pw fetch start');
 
                 try {
                     const response = await fetch('/api/login', {
@@ -1146,6 +1227,7 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ password, key: loginKey })
                     });
+                    clientLog('pw status ' + response.status);
 
                     if (!response.ok) {
                         const data = await response.json();
@@ -1162,6 +1244,7 @@
                         throw new Error(t('no_token'));
                     }
                 } catch (err) {
+                    clientLog('pw error: ' + err.message);
                     showLoginError(err.message || t('login_failed'));
                     passwordField.style.borderColor = 'var(--danger-color)';
                 } finally {

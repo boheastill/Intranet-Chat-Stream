@@ -750,10 +750,12 @@
                 <input type="password" id="passwordField" style="width: 100%; background: var(--surface-card); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.8rem 1rem; border-radius: 0.75rem; font-size: 1.1rem; text-align: center; outline: none; transition: border-color 0.2s;" placeholder="Enter fallback password" data-i18n-ph="pw_ph">
             </div>
 
+            <div id="loginError" style="display: none; color: var(--danger-color); font-size: 0.85rem; line-height: 1.4; padding: 0.5rem; background: rgba(239, 68, 68, 0.08); border-radius: 0.5rem;"></div>
+
             <button id="btnLogin" class="submit-btn" style="width: 100%; justify-content: center; padding: 0.8rem 1rem; font-size: 0.95rem; border-radius: 0.75rem;" data-i18n="login_btn">Verify &amp; enter</button>
             
             <div style="margin-top: 0.5rem; display: none;" id="toggleLoginContainer">
-                <a href="#" id="toggleLoginMode" style="color: var(--text-secondary); font-size: 0.8rem; text-decoration: underline; cursor: pointer; transition: color 0.2s;" data-i18n="to_pw">Use fallback password</a>
+                <a href="#" id="toggleLoginMode" style="display: inline-block; padding: 0.4rem; color: var(--text-secondary); font-size: 0.8rem; text-decoration: underline; cursor: pointer; transition: color 0.2s;" data-i18n="to_pw">Use fallback password</a>
             </div>
         </div>
     </div>
@@ -826,6 +828,9 @@
                 verifying: 'Verifying...', verify_failed: 'Verification failed',
                 no_token: 'No access token provided',
                 login_failed: 'Login failed — check the password and URL key',
+                need_key: 'Password login needs ?key= in the URL',
+                invalid_token: 'Invalid access token',
+                short_looks_like_pw: 'This looks like a password. Use the ?key= link to log in with password.',
                 sync_fail: 'Sync failure', last_sync: 'Last sync', offline: 'Offline / connection timeout',
                 pinned_badge: 'Pinned', copy_tip: 'Click to copy', copied: 'Copied', copy: 'Copy',
                 download_full: 'Full text', unpin: 'Unpin', pin: 'Pin', download: 'Download', del: 'Delete',
@@ -851,6 +856,9 @@
                 verifying: '正在验证...', verify_failed: '验证失败',
                 no_token: '未提供安全 Token',
                 login_failed: '登录验证失败，请检查密码及 URL 参数',
+                need_key: '密码登录需要在 URL 里带 ?key= 参数',
+                invalid_token: '安全 Token 无效',
+                short_looks_like_pw: '这看起来像是密码。请使用带 ?key= 的链接进行密码登录。',
                 sync_fail: '同步故障', last_sync: '上次同步', offline: '离线/链接超时',
                 pinned_badge: '置顶', copy_tip: '点击直接复制全文', copied: '已复制', copy: '复制',
                 download_full: '下载全文', unpin: '取消保护', pin: '置顶保护', download: '下载', del: '删除',
@@ -925,9 +933,25 @@
                 } else {
                     setLoginMode('token');
                 }
+
+                // No key in URL means password login is impossible; hide the confusing toggle
+                if (!loginKey) {
+                    toggleContainer.style.display = 'none';
+                }
             } else {
                 startService();
             }
+        }
+
+        function showLoginError(msg) {
+            const el = document.getElementById('loginError');
+            el.textContent = msg;
+            el.style.display = 'block';
+        }
+        function clearLoginError() {
+            const el = document.getElementById('loginError');
+            el.textContent = '';
+            el.style.display = 'none';
         }
 
         function bindLoginEvents() {
@@ -941,15 +965,21 @@
             };
 
             const toggleLink = document.getElementById('toggleLoginMode');
-            toggleLink.onclick = (e) => {
-                e.preventDefault();
-                e.stopPropagation();
+            const switchMode = (e) => {
+                if (e) { e.preventDefault(); e.stopPropagation(); }
+                // Password login is only possible when the URL carries a key
+                if (loginMode === 'token' && !loginKey) {
+                    showLoginError(t('need_key'));
+                    return;
+                }
+                clearLoginError();
                 setLoginMode(loginMode === 'token' ? 'email' : 'token');
             };
-            // iOS Safari sometimes swallows click on <a href="#">; touchstart plus preventDefault on click keeps it responsive
-            toggleLink.ontouchstart = (e) => {
+            toggleLink.onclick = switchMode;
+            // iOS Safari sometimes swallows click on <a href="#">; touchend is more reliable than touchstart
+            toggleLink.ontouchend = (e) => {
                 e.preventDefault();
-                setLoginMode(loginMode === 'token' ? 'email' : 'token');
+                switchMode(e);
             };
         }
 
@@ -961,6 +991,7 @@
             const loginTitle = document.getElementById('loginTitle');
             const loginSubtitle = document.getElementById('loginSubtitle');
 
+            clearLoginError();
             // Reset error borders
             tokenField.style.borderColor = 'var(--border-color)';
             passwordField.style.borderColor = 'var(--border-color)';
@@ -983,16 +1014,45 @@
         }
 
         async function handleLoginSubmit() {
+            clearLoginError();
             if (loginMode === 'token') {
                 const entered = tokenField.value.trim();
                 if (!entered) {
                     tokenField.style.borderColor = 'var(--danger-color)';
                     return;
                 }
-                safeStore.set('ics_token', entered);
-                token = entered;
-                loginModal.style.display = 'none';
-                startService();
+                // If the entered value is very short, it is likely the fallback password,
+                // not the 32-char token. Show a helpful message instead of silently failing.
+                if (entered.length <= 8) {
+                    tokenField.style.borderColor = 'var(--danger-color)';
+                    showLoginError(t('short_looks_like_pw'));
+                    return;
+                }
+
+                btnLogin.disabled = true;
+                btnLogin.innerText = t('verifying');
+
+                try {
+                    // Verify the token before hiding the modal so the user sees clear feedback
+                    const response = await fetch(currentChannel ? `/api/list?channel=${currentChannel}` : '/api/list', {
+                        headers: { 'X-Auth-Token': entered }
+                    });
+                    if (response.status === 401 || response.status === 403) {
+                        throw new Error(t('invalid_token'));
+                    }
+                    if (!response.ok) throw new Error(t('verify_failed'));
+
+                    safeStore.set('ics_token', entered);
+                    token = entered;
+                    loginModal.style.display = 'none';
+                    startService();
+                } catch (err) {
+                    showLoginError(err.message || t('invalid_token'));
+                    tokenField.style.borderColor = 'var(--danger-color)';
+                } finally {
+                    btnLogin.disabled = false;
+                    btnLogin.innerText = t('login_btn');
+                }
             } else {
                 const password = passwordField.value.trim();
                 if (!password) {
@@ -1026,7 +1086,7 @@
                         throw new Error(t('no_token'));
                     }
                 } catch (err) {
-                    alert(err.message || t('login_failed'));
+                    showLoginError(err.message || t('login_failed'));
                     passwordField.style.borderColor = 'var(--danger-color)';
                 } finally {
                     btnLogin.disabled = false;
@@ -1065,6 +1125,8 @@
             } else {
                 setLoginMode('token');
             }
+
+            showLoginError(t('invalid_token'));
         }
 
         // Utility to format sizes in JS

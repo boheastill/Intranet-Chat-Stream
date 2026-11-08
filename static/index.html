@@ -1044,6 +1044,8 @@
                 login_failed: 'Login failed — check the password and URL key',
                 http_error: 'Server returned an error (HTTP',
                 bad_response: 'Unexpected reply from the server — are you behind a proxy or login portal?',
+                sent_key: 'URL key sent:',
+                key_missing: '(none — the address bar has no ?key=)',
                 invalid_token: 'Invalid access token',
                 short_looks_like_pw: 'This looks like a password. Use the ?key= link to log in with password.',
                 sync_fail: 'Sync failure', last_sync: 'Last sync', offline: 'Offline / connection timeout',
@@ -1073,6 +1075,8 @@
                 login_failed: '登录验证失败，请检查密码及 URL 参数',
                 http_error: '服务器返回错误 (HTTP',
                 bad_response: '服务器响应异常，是否处于代理或需要登录的网络（如 WiFi 认证页）？',
+                sent_key: '本次提交的 URL key：',
+                key_missing: '（空 —— 地址栏里没有 ?key=）',
                 invalid_token: '安全 Token 无效',
                 short_looks_like_pw: '这看起来像是密码。请使用带 ?key= 的链接进行密码登录。',
                 sync_fail: '同步故障', last_sync: '上次同步', offline: '离线/链接超时',
@@ -1411,7 +1415,16 @@
                     try { data = JSON.parse(raw); } catch (e) {}
 
                     if (!response.ok) {
-                        if (data && data.error) throw new Error(data.error);
+                        if (data && data.error) {
+                            // Echo back the URL key we actually sent. It is the
+                            // user's own input, so this leaks nothing about the
+                            // stored secret — but it instantly exposes the usual
+                            // cause: the browser autocompleting an OLD ?key= into
+                            // the address bar, which otherwise looks exactly like
+                            // "wrong password".
+                            const shown = loginKey ? '"' + loginKey + '"' : t('key_missing');
+                            throw new Error(data.error + '\n' + t('sent_key') + ' ' + shown);
+                        }
                         throw new Error(t('http_error') + ' ' + response.status);
                     }
                     if (!data) throw new Error(t('bad_response'));

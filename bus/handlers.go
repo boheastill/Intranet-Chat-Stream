@@ -487,7 +487,13 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		gCount := globalAttempt.FailCount
 		attemptsMu.Unlock()
 
-		log.Printf("[%s] Failed login attempt (ip count: %d, global count: %d)", ip, ipAttempt.FailCount, gCount)
+		// Say WHICH factor missed, never the values. Without this, "wrong
+		// password" and "wrong key in the URL" are indistinguishable from the
+		// client's side, which makes a typo in the ?key= look like a bad password.
+		// Lengths only — enough to spot a stray character or a truncated URL.
+		log.Printf("[%s] Failed login attempt (ip count: %d, global count: %d) passwordOK=%v keyOK=%v | got pw len=%d, key len=%d",
+			ip, ipAttempt.FailCount, gCount, passwordOK, keyOK,
+			len(strings.TrimSpace(req.Password)), len(strings.TrimSpace(req.Key)))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(LoginResponse{Status: "error", Error: "密码或 URL 参数错误"})

@@ -927,6 +927,10 @@
 
             <div id="loginError" style="display: none; color: var(--danger-color); font-size: 0.85rem; line-height: 1.4; padding: 0.5rem; background: rgba(239, 68, 68, 0.08); border-radius: 0.5rem;"></div>
 
+            <!-- Login failure evidence: what the browser actually sent. Shown only
+                 after a failure, so it can be screenshotted verbatim. -->
+            <div id="loginEvidence" style="display: none; text-align: left; font-size: 0.68rem; font-family: monospace; line-height: 1.45; color: var(--text-secondary); background: rgba(0,0,0,0.25); border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 0.5rem; max-height: 40vh; overflow: auto; white-space: pre-wrap; word-break: break-all;"></div>
+
             <button type="button" id="btnLogin" class="submit-btn" style="width: 100%; justify-content: center; padding: 0.9rem 1rem; font-size: 1rem; border-radius: 0.75rem; min-height: 48px;" data-i18n="login_btn" onclick="window.icsLoginSubmit();">Verify &amp; enter</button>
 
             <div style="margin-top: 0.25rem; display: none;" id="toggleLoginContainer">
@@ -1122,6 +1126,10 @@
 
         function initAuth() {
             // 1. Intercept Token in URL query parameter (for automatic setups or one-click links)
+            // Keep the address exactly as it arrived, before the key is scrubbed
+            // from the bar — the diagnostic panel must show what was really typed.
+            globalThis.__icsOriginalUrl = window.location.href;
+
             const urlParams = new URLSearchParams(window.location.search);
             const tokenParam = urlParams.get('token');
             if (tokenParam) {
@@ -1193,6 +1201,59 @@
                         envEl.textContent = 'UA: ' + ua + ' | host: ' + window.location.host + ' | ' + conn;
                     }
                 } catch (e) {}
+            }
+        }
+
+        // Build a verbatim report of the failed attempt. Everything shown here is
+        // data the caller produced themselves (URL, typed bytes, server reply), so
+        // it is safe to display and it ends the guessing.
+        // Chinese IMEs emit full-width digits/letters (９９９９) that look identical
+        // to ASCII but are 3 bytes each in UTF-8. The password then never matches
+        // and the failure looks inexplicable. Normalise as the user types.
+        function toHalfWidth(str) {
+            return String(str).replace(/[\uFF01-\uFF5E]/g,
+                ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
+                               .replace(/\u3000/g, ' ');
+        }
+
+        function attachHalfWidthInput(field) {
+            if (!field || field.__hwBound) return;
+            field.__hwBound = true;
+            field.addEventListener('input', () => {
+                const raw = field.value;
+                const fixed = toHalfWidth(raw);
+                if (fixed === raw) return;
+                const pos = field.selectionStart;
+                field.value = fixed;
+                try { field.setSelectionRange(pos, pos); } catch (e) {}
+            });
+        }
+
+        function showLoginEvidence(password) {
+            try {
+                const d = globalThis.__icsLastDiag || {};
+                const el = document.getElementById('loginEvidence');
+                if (!el) return;
+
+                const cps = Array.from(password || '').map(c => c.codePointAt(0));
+                const fmtCp = cps.map(c => (c >= 0xFF01 && c <= 0xFF5E)
+                    ? c + ' (全角)' : c).join(', ');
+
+                const lines = [
+                    '── 诊断证据 ──',
+                    '页面 URL      : ' + (d.urlAtLoad || '(未知)'),
+                    '地址栏 ?key=  : ' + (d.keyFromUrl ? '"' + d.keyFromUrl + '" (' + d.keyFromUrl.length + ' 字符)' : '(空)'),
+                    '实际发送 key  : ' + (d.keySent ? '"' + d.keySent + '" (' + d.keySent.length + ' 字符)' : '(空)'),
+                    '密码字符数    : ' + (password ? password.length : 0),
+                    '密码字节数    : ' + (password ? new TextEncoder().encode(password).length : 0),
+                    '密码码点      : ' + (fmtCp || '(空)'),
+                    'HTTP 状态     : ' + (d.status || '(无响应)'),
+                    '服务器原文    : ' + (d.raw || '(空)'),
+                ];
+                el.textContent = lines.join('\n');
+                el.style.display = 'block';
+            } catch (e) {
+                // never let diagnostics break the login flow
             }
         }
 
@@ -1285,6 +1346,8 @@
 
         function bindLoginEvents() {
             try {
+                attachHalfWidthInput(tokenField);
+                attachHalfWidthInput(passwordField);
                 tokenField.onkeydown = e => {
                     if (e.key === 'Enter') handleLoginSubmit();
                 };
@@ -1393,16 +1456,23 @@
                 btnLogin.innerText = t('verifying');
                 clientLog('pw fetch start');
 
+                // Evidence capture: when a login fails we show the caller exactly
+                // what left the browser. No guessing about what "should" work —
+                // the URL, the bytes that were typed, and the raw server reply.
+                const diag = { urlAtLoad: globalThis.__icsOriginalUrl || window.location.href, keyFromUrl: '', keySent: '', status: 0, raw: '' };
                 try {
+                    // Read the key from the ORIGINAL address: by now the live URL
+                    // has been scrubbed, so window.location.search no longer has it.
+                    diag.keyFromUrl = new URL(diag.urlAtLoad).searchParams.get('key') || '';
+                    diag.keySent = loginKey || '';
+                    globalThis.__icsLastDiag = diag;
+
                     const response = await fetch('/api/login', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        // No ?key= in the URL: send the password in the key slot is
-                        // wrong, so send an empty key and let the server's error
-                        // surface. (The key is required; this only makes the failure
-                        // legible instead of silently stuck.)
                         body: JSON.stringify({ password, key: loginKey || '' })
                     });
+                    diag.status = response.status;
                     clientLog('pw status ' + response.status);
 
                     // Never assume the body is JSON. Behind a proxy, a captive
@@ -1411,6 +1481,7 @@
                     // SyntaxError whose raw text ("Unexpected token '<'...") was
                     // shown to the user as if it were a login error.
                     const raw = await response.text();
+                    diag.raw = raw.slice(0, 400);
                     let data = null;
                     try { data = JSON.parse(raw); } catch (e) {}
 
@@ -1441,6 +1512,7 @@
                     clientLog('pw error: ' + err.message);
                     showLoginError(err.message || t('login_failed'));
                     passwordField.style.borderColor = 'var(--danger-color)';
+                    showLoginEvidence(password);
                 } finally {
                     btnLogin.disabled = false;
                     btnLogin.innerText = t('login_btn');

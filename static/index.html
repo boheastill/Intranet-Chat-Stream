@@ -1042,6 +1042,8 @@
                 verifying: 'Verifying...', verify_failed: 'Verification failed',
                 no_token: 'No access token provided',
                 login_failed: 'Login failed — check the password and URL key',
+                http_error: 'Server returned an error (HTTP',
+                bad_response: 'Unexpected reply from the server — are you behind a proxy or login portal?',
                 invalid_token: 'Invalid access token',
                 short_looks_like_pw: 'This looks like a password. Use the ?key= link to log in with password.',
                 sync_fail: 'Sync failure', last_sync: 'Last sync', offline: 'Offline / connection timeout',
@@ -1069,6 +1071,8 @@
                 verifying: '正在验证...', verify_failed: '验证失败',
                 no_token: '未提供安全 Token',
                 login_failed: '登录验证失败，请检查密码及 URL 参数',
+                http_error: '服务器返回错误 (HTTP',
+                bad_response: '服务器响应异常，是否处于代理或需要登录的网络（如 WiFi 认证页）？',
                 invalid_token: '安全 Token 无效',
                 short_looks_like_pw: '这看起来像是密码。请使用带 ?key= 的链接进行密码登录。',
                 sync_fail: '同步故障', last_sync: '上次同步', offline: '离线/链接超时',
@@ -1397,12 +1401,20 @@
                     });
                     clientLog('pw status ' + response.status);
 
-                    if (!response.ok) {
-                        const data = await response.json();
-                        throw new Error(data.error || t('verify_failed'));
-                    }
+                    // Never assume the body is JSON. Behind a proxy, a captive
+                    // portal, or a Cloudflare challenge the login endpoint answers
+                    // with an HTML page, and response.json() would then throw a
+                    // SyntaxError whose raw text ("Unexpected token '<'...") was
+                    // shown to the user as if it were a login error.
+                    const raw = await response.text();
+                    let data = null;
+                    try { data = JSON.parse(raw); } catch (e) {}
 
-                    const data = await response.json();
+                    if (!response.ok) {
+                        if (data && data.error) throw new Error(data.error);
+                        throw new Error(t('http_error') + ' ' + response.status);
+                    }
+                    if (!data) throw new Error(t('bad_response'));
                     if (data.status === 'success' && data.token) {
                         safeStore.set('ics_token', data.token);
                         sessionStore.del('ics_key'); // no longer needed once inside

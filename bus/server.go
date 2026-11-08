@@ -8,8 +8,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
+	"syscall"
 	"time"
 )
 
@@ -60,7 +63,9 @@ func Run(cfg Config) error {
 	mux.HandleFunc("/api/download/", handleDownload)
 	mux.HandleFunc("/", serveStatic)
 
-	handler := securityHeaders(tokenAuthMiddleware(mux, config.Token))
+	// Order: observability outermost so it sees the final status of every
+	// request, including ones rejected by the middlewares below it.
+	handler := observe(securityHeaders(tokenAuthMiddleware(mux, config.Token)))
 
 	// Janitor: expire abandoned chunked uploads and their temp files
 	go func() {
@@ -71,9 +76,121 @@ func Run(cfg Config) error {
 
 	// Listen only on 127.0.0.1 (Cloudflare Tunnel forwards locally)
 	bindAddr := fmt.Sprintf("127.0.0.1:%d", config.Port)
-	log.Printf("Starting ICS Message Bus locally on %s...", bindAddr)
-	log.Printf("Web UI (logged in): http://%s/?token=%s", bindAddr, config.Token)
+
+	// One startup line with everything an operator needs after a reboot, so the
+	// journal alone answers "what is running, with which settings".
+	log.Printf("STARTUP ics %s | listen=%s | storage=%s quota=%s | channels=enabled",
+		buildVersion, bindAddr, filesDir, formatSize(maxDirSize))
+	log.Printf("STARTUP files in store: %d | login key length: %d | password length: %d",
+		countFiles(), len(config.LoginKey), len(config.Password))
+
+	// Say why the process stopped: without this, a reboot, an OOM kill and a
+	// deploy all look identical in the journal.
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		sig := <-sigs
+		log.Printf("SHUTDOWN received %s | uptime=%s", sig, time.Since(startedAt).Round(time.Second))
+		os.Exit(0)
+	}()
+	startedAt = time.Now()
+
 	return http.ListenAndServe(bindAddr, handler)
+}
+
+// buildVersion is reported at startup so the journal records which build is
+// actually running (deploys otherwise look identical).
+var buildVersion = "dev"
+
+var startedAt = time.Now()
+
+// countFiles is a cheap startup census of the message store.
+func countFiles() int {
+	n := 0
+	filepath.Walk(filesDir, func(_ string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			n++
+		}
+		return nil
+	})
+	return n
+}
+
+// statusRecorder captures what was actually sent so observe() can log failures
+// without every handler having to remember. Flush/Hijack are forwarded or SSE
+// and streaming break.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+	bytes  int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *statusRecorder) Write(b []byte) (int, error) {
+	if r.status == 0 {
+		r.status = http.StatusOK
+	}
+	n, err := r.ResponseWriter.Write(b)
+	r.bytes += n
+	return n, err
+}
+
+func (r *statusRecorder) Flush() {
+	if f, ok := r.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// observe logs every request that did NOT go through cleanly, plus panics.
+//
+// Rationale: the handlers have ~25 distinct failure exits and only a handful
+// logged anything, so "it just errors" was untraceable. Rather than sprinkle log
+// calls on every branch (easy to miss one, and noisy to maintain), capture the
+// outcome in one place:
+//
+//   - 5xx always logged (a bug or a broken disk, never routine)
+//   - any 4xx on a mutating method logged (a push/delete that did not happen)
+//   - panics logged with a stack and turned into 500 instead of killing the conn
+//
+// Routine 404s and 405 probes stay silent on purpose: they are the background
+// radiation of anything reachable from the internet.
+func observe(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w}
+		defer func() {
+			if p := recover(); p != nil {
+				log.Printf("PANIC %s %s: %v\n%s", r.Method, r.URL.Path, p, debug.Stack())
+				if rec.status == 0 {
+					http.Error(rec, "Internal Server Error", http.StatusInternalServerError)
+				}
+				return
+			}
+			status := rec.status
+			if status == 0 {
+				status = http.StatusOK
+			}
+			mutating := r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete
+			if status >= 500 || (mutating && status >= 400) {
+				log.Printf("REQ %s %s -> %d in %s (%d bytes) ua=%q",
+					r.Method, r.URL.Path, status,
+					time.Since(start).Round(time.Millisecond), rec.bytes,
+					truncateUA(r.Header.Get("User-Agent")))
+			}
+		}()
+		next.ServeHTTP(rec, r)
+	})
+}
+
+func truncateUA(ua string) string {
+	if len(ua) > 80 {
+		return ua[:80] + "..."
+	}
+	return ua
 }
 
 // securityHeaders sets conservative defaults on every response. The app is a

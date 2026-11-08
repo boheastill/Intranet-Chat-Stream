@@ -1333,9 +1333,16 @@
                 }
                 // If the entered value is very short, it is likely the fallback password,
                 // not the 32-char token. Show a helpful message instead of silently failing.
+                // A short value in token mode is almost always the fallback
+                // password typed into the wrong box. Move it across instead of
+                // scolding the user with "use the ?key= link" — that message was
+                // a dead end when the URL had no ?key= to begin with.
                 if (entered.length <= 8) {
-                    tokenField.style.borderColor = 'var(--danger-color)';
-                    showLoginError(t('short_looks_like_pw'));
+                    passwordField.value = entered;
+                    tokenField.value = '';
+                    tokenField.style.borderColor = 'var(--border-color)';
+                    setLoginMode('email');
+                    passwordField.focus();
                     return;
                 }
 
@@ -1382,7 +1389,11 @@
                     const response = await fetch('/api/login', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ password, key: loginKey })
+                        // No ?key= in the URL: send the password in the key slot is
+                        // wrong, so send an empty key and let the server's error
+                        // surface. (The key is required; this only makes the failure
+                        // legible instead of silently stuck.)
+                        body: JSON.stringify({ password, key: loginKey || '' })
                     });
                     clientLog('pw status ' + response.status);
 
@@ -1440,11 +1451,17 @@
             // Re-bind controls because this overlay may appear after startService() already ran
             bindLoginEvents();
 
-            if (loginMode === 'email') {
+            // Always offer the password form here. Getting kicked back to the login
+            // box is already a bad moment; trapping the user in token mode with the
+            // switch button hidden (no ?key= in the URL) made it unrecoverable
+            // without editing the address bar by hand.
+            if (loginMode === 'email' || loginKey) {
                 setLoginMode('email');
             } else {
                 setLoginMode('token');
             }
+            // The switch must be reachable even when the URL carries no ?key=.
+            document.getElementById('toggleLoginContainer').style.display = 'block';
 
             showLoginError(t('invalid_token'));
         }

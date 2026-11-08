@@ -49,6 +49,20 @@ Rotating the token invalidates every existing session (clients re-login).
 - Security headers: `nosniff`, `X-Frame-Options: DENY`, `no-referrer`,
   restrictive `Permissions-Policy`.
 
+## Observability
+
+Every login outcome is logged (success, wrong factor, rate-limited, rejected as
+malformed) with the user agent and the submitted value's character/byte counts —
+never the secret itself. Every 5xx and every 4xx on a mutating request is logged
+from one middleware, so a failed write is traceable without each handler having
+to remember. Panics are logged with a stack and answered with 500 rather than
+dropping the connection.
+
+Deliberately not logged: routine 404/405 on GET, successful reads, and secret
+values. A public host receives constant scanner traffic; logging it would grow
+the journal without bound, which is the same failure the request log was meant
+to prevent.
+
 ## What is NOT defended
 
 Be honest about these before storing anything sensitive:

@@ -160,7 +160,15 @@ sudo systemctl daemon-reload
 sudo systemctl enable ics --now
 ```
 
-Successful writes, actions, and cleanup events are logged to stdout (systemd journal) as a minimal audit trail.
+Everything worth seeing goes to stdout (systemd journal) — no log files to rotate, no log configuration:
+
+- `STARTUP` / `SHUTDOWN` — build id, listen address, storage dir, quota, file count, and the signal that stopped it (so a reboot, an OOM kill and a deploy are distinguishable)
+- `LOGIN SUCCESS | FAILED | RATE-LIMITED | REJECTED` — one line per attempt, including which factor matched and the submitted value's **character vs byte count** (4 chars / 12 bytes is the signature of full-width digits from a CJK IME, which otherwise reads as "wrong password")
+- `REQ` — any 5xx, and any 4xx on a mutating method (a push or delete that did not happen)
+- `PANIC` — stack trace, answered with 500 instead of dropping the connection
+- `PUSH SUCCESS` / `DOWNLOAD` / `ACTION` / `CHUNK` / `CLEANUP` — the audit trail
+
+Routine 404/405 on GET and successful reads stay silent on purpose: this is internet-reachable, and logging that noise recreates the unbounded-growth problem it would be meant to solve. Secret values are never logged — only their length and whether they matched.
 
 ## License
 

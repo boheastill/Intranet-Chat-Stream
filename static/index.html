@@ -594,42 +594,8 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        .eye-toggle {
-            position: absolute;
-            right: 0.6rem;
-            top: 50%;
-            transform: translateY(-50%);
-            background: none;
-            border: none;
-            font-size: 1.1rem;
-            line-height: 1;
-            cursor: pointer;
-            padding: 0.4rem;
-            opacity: 0.6;
-            -webkit-tap-highlight-color: transparent;
-            z-index: 2;
-        }
-        .eye-toggle:active {
-            opacity: 1;
-        }
-
-        .probe-btn {
-            background: rgba(255,255,255,0.05);
-            border: 1px solid var(--border-color);
-            color: var(--text-secondary);
-            border-radius: 0.4rem;
-            padding: 0.35rem 0.6rem;
-            font-size: 0.7rem;
-            cursor: pointer;
-            font-family: inherit;
-            -webkit-tap-highlight-color: transparent;
-        }
-        .probe-btn:active {
-            background: rgba(255,255,255,0.1);
-        }
-
         /* iOS Safari: avoid 300ms tap delay and ghost clicks */
-        .submit-btn, .link-btn, .eye-toggle, .probe-btn {
+        .submit-btn, .link-btn, .show-toggle {
             touch-action: manipulation;
             -webkit-tap-highlight-color: transparent;
         }
@@ -937,14 +903,10 @@
                 <button type="button" id="toggleLoginMode" class="link-btn" data-i18n="to_pw" onclick="window.icsToggleMode();">Use fallback password</button>
             </div>
 
-            <!-- Diagnostic probes (only shown with ?debug=1) -->
+            <!-- Debug trace, only rendered with ?debug=1. The old probe buttons are
+                 gone: every outcome is now logged server-side, and a failed login
+                 shows the evidence panel above. -->
             <div id="debugPanel" style="border-top: 1px solid var(--border-color); padding-top: 0.75rem; display: none; flex-direction: column; gap: 0.5rem;">
-                <div style="font-size: 0.7rem; color: var(--text-secondary);">Diagnostic probes</div>
-                <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
-                    <button type="button" class="probe-btn" onclick="window.icsProbe('click');">Test click</button>
-                    <button type="button" class="probe-btn" onclick="window.icsProbe('ping');">Ping server</button>
-                    <button type="button" class="probe-btn" onclick="window.icsProbe('login');">Send login</button>
-                </div>
                 <div id="clientLog" style="display: none; font-size: 0.7rem; color: var(--text-secondary); background: rgba(0,0,0,0.2); padding: 0.4rem; border-radius: 0.4rem; max-height: 120px; overflow-y: auto; text-align: left; font-family: monospace; white-space: pre-wrap;"></div>
                 <div id="envInfo" style="font-size: 0.65rem; color: var(--text-secondary); text-align: left; word-break: break-all;"></div>
                 <div id="errorLog" style="display: none; font-size: 0.7rem; color: var(--danger-color); background: rgba(239,68,68,0.1); padding: 0.4rem; border-radius: 0.4rem; text-align: left; font-family: monospace; white-space: pre-wrap;"></div>
@@ -1269,7 +1231,9 @@
         }
 
         function clientLog(msg) {
+            if (!DEBUG) return;              // silent for real users
             const el = document.getElementById('clientLog');
+            if (!el) return;
             el.style.display = 'block';
             const line = new Date().toLocaleTimeString() + ' ' + msg;
             el.textContent = line + '\n' + el.textContent;
@@ -1310,39 +1274,6 @@
             return false;
         };
 
-        window.icsProbe = async function(kind) {
-            clientLog('probe ' + kind);
-            if (kind === 'click') {
-                clientLog('probe click OK');
-                return false;
-            }
-            if (kind === 'ping') {
-                try {
-                    const r = await fetch('/api/list', { headers: { 'X-Auth-Token': 'probe' } });
-                    clientLog('probe ping status ' + r.status);
-                } catch (e) {
-                    clientLog('probe ping error: ' + e.message);
-                }
-                return false;
-            }
-            if (kind === 'login') {
-                const field = loginMode === 'token' ? tokenField : passwordField;
-                const value = field.value.trim();
-                try {
-                    const r = await fetch('/api/login', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ password: value, key: loginKey })
-                    });
-                    clientLog('probe login status ' + r.status);
-                    const txt = await r.text();
-                    clientLog('probe login body ' + txt.slice(0, 80));
-                } catch (e) {
-                    clientLog('probe login error: ' + e.message);
-                }
-                return false;
-            }
-        };
 
         function bindLoginEvents() {
             try {

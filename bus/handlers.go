@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // handleList lists all messages in chronological order (newest first) and returns storage capacity headers.
@@ -370,6 +371,17 @@ type LoginResponse struct {
 	Error  string `json:"error,omitempty"`
 }
 
+// logLogin writes one line per login attempt, whatever the outcome. The values
+// are never logged — only their shape (character vs byte counts, which factor
+// matched) plus the user agent, which is what actually identifies a client.
+func logLogin(ip, outcome, detail string, r *http.Request) {
+	ua := r.Header.Get("User-Agent")
+	if len(ua) > 90 {
+		ua = ua[:90] + "..."
+	}
+	log.Printf("[%s] LOGIN %s: %s | ua=%q", ip, strings.ToUpper(outcome), detail, ua)
+}
+
 // backoffDelaySec converts a failure count into the exponential wait (capped).
 func backoffDelaySec(failCount int) int {
 	if failCount <= 0 {
@@ -413,15 +425,21 @@ func pruneIPAttempts(now time.Time) {
 // Correct credentials never wait (a matching answer is not a guess being
 // rate-limited; delaying it would let an attacker lock the owner out).
 func handleLogin(w http.ResponseWriter, r *http.Request) {
+	// Every branch below returns a log line. A login endpoint that answers the
+	// caller but tells the operator nothing is untraceable in practice — the
+	// earlier version logged only 401/200, so a rate-limited or malformed
+	// attempt (the two most likely when someone says "it just errors") left no
+	// trace at all.
+	ip := getClientIP(r)
 	if r.Method != http.MethodPost {
+		logLogin(ip, "rejected", "method "+r.Method, r)
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	ip := getClientIP(r)
-
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		logLogin(ip, "rejected", "malformed JSON body: "+err.Error(), r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(LoginResponse{Status: "error", Error: "Invalid request payload"})
@@ -429,6 +447,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if strings.TrimSpace(req.Password) == "" || strings.TrimSpace(req.Key) == "" {
+		logLogin(ip, "rejected", fmt.Sprintf("empty field: password=%t key=%t", req.Password != "", req.Key != ""), r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(LoginResponse{Status: "error", Error: "Password and URL key cannot be empty"})
@@ -469,6 +488,10 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		pruneIPAttempts(now)
 		if wait > 0 {
 			attemptsMu.Unlock()
+			// Rate-limited attempts used to leave NO trace, which is precisely
+			// the case where someone reports "it just errors" and the operator
+			// sees an empty log.
+			logLogin(ip, "rate-limited", fmt.Sprintf("wait %ds (ip fails=%d, global fails=%d)", wait, ipAttempts[ip].FailCount, globalAttempt.FailCount), r)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusTooManyRequests)
 			json.NewEncoder(w).Encode(LoginResponse{
@@ -491,9 +514,12 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		// password" and "wrong key in the URL" are indistinguishable from the
 		// client's side, which makes a typo in the ?key= look like a bad password.
 		// Lengths only — enough to spot a stray character or a truncated URL.
-		log.Printf("[%s] Failed login attempt (ip count: %d, global count: %d) passwordOK=%v keyOK=%v | got pw len=%d, key len=%d",
-			ip, ipAttempt.FailCount, gCount, passwordOK, keyOK,
-			len(strings.TrimSpace(req.Password)), len(strings.TrimSpace(req.Key)))
+		logLogin(ip, "failed", fmt.Sprintf(
+			"passwordOK=%v keyOK=%v | pw chars=%d bytes=%d, key chars=%d (ip fails=%d, global fails=%d)",
+			passwordOK, keyOK,
+			utf8.RuneCountInString(req.Password), len(req.Password),
+			utf8.RuneCountInString(req.Key),
+			ipAttempt.FailCount, gCount), r)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(LoginResponse{Status: "error", Error: "密码或 URL 参数错误"})
@@ -506,7 +532,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	globalAttempt = IPAttempt{}
 	attemptsMu.Unlock()
 
-	log.Printf("[%s] LOGIN SUCCESS", ip)
+	logLogin(ip, "success", "credentials accepted", r)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(LoginResponse{Status: "success", Token: config.Token})

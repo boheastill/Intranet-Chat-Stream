@@ -172,4 +172,4 @@ Routine 404/405 on GET and successful reads stay silent on purpose: this is inte
 
 ## License
 
-[MIT](LICENSE) © [Bohea Still](https://boheastill.com/?r=gh-ics) — independent developer taking on automation, AI-pipeline and integration projects.
+[MIT](LICENSE) © [Bohea Still](https://boheastill.com/?r=gh-ics) ([hi@boheastill.com](mailto:hi@boheastill.com)) — independent engineer building hardware↔software integrations and reliable automation.
